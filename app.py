@@ -5,335 +5,291 @@ import streamlit as st, ccxt, time, pandas as pd, numpy as np
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 
-#==========================================
-# [시스템 기능] 데이터 영구 저장을 위한 설정
-#==========================================
+--- [추가 시작] ---
+def check_macro_trend_safeguard(symbol, target_direction):
+try:
+exchange = ccxt.okx()
+ohlcv = exchange.fetch_ohlcv(symbol, '4h', limit=70)
+df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+df['ma_50'] = df['close'].rolling(window=50).mean()
+curr_p, ma = df['close'].iloc[-1], df['ma_50'].iloc[-1]
+if curr_p < ma * 0.995 and target_direction == "LONG": return False, "하락장 진입으로 롱 배팅 차단"
+elif curr_p > ma * 1.005 and target_direction == "SHORT": return False, "상승장 진입으로 숏 배팅 차단"
+return True, "거시 추세 안전"
+except: return True, "필터 검사 오류"
+
+def show_super_macro_trend_ui(symbol):
+st.markdown("### 초장기 거시 대추세 브리핑")
+try:
+exchange = ccxt.okx()
+for tf in ['1d', '1w', '1M']:
+ohlcv = exchange.fetch_ohlcv(symbol, tf, limit=40)
+df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+df['ma20'] = df['close'].rolling(20).mean()
+st.write(f"{tf} 상태: {'상승' if df['close'].iloc[-1] > df['ma20'].iloc[-1] else '하락'}")
+except: pass
+--- [추가 끝] ---
+
+
+[기능 추가] 데이터 영구 저장을 위한 설정
 DATA_FILE = "trading_data.json"
 
 def save_data():
-    data_to_save = {}
-    for k, v in st.session_state.items():
-        if isinstance(v, datetime):
-            data_to_save[f"dt{k}"] = v.isoformat()
-        elif isinstance(v, dict) and k == 'last_trade_end_time':
-            data_to_save[k] = {time_k: time_v.isoformat() for time_k, time_v in v.items()}
-        else:
-            try:
-                json.dumps(v)
-                data_to_save[k] = v
-            except:
-                pass
-
-    with open(DATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data_to_save, f, ensure_ascii=False, indent=4)
+data_to_save = {
+'daily_stats': st.session_state.daily_stats,
+'trade_logs': st.session_state.trade_logs,
+'last_trade_end_time': {k: v.isoformat() for k, v in st.session_state.last_trade_end_time.items()},
+'active_virtual_positions': st.session_state.active_virtual_positions
+}
+with open(DATA_FILE, 'w') as f: json.dump(data_to_save, f)
 
 def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                for k, v in data.items():
-                    if k.startswith("dt"):
-                        real_key = k.replace("dt", "")
-                        st.session_state[real_key] = datetime.fromisoformat(v)
-                    elif k == 'last_trade_end_time':
-                        st.session_state[k] = {time_k: datetime.fromisoformat(time_v) for time_k, time_v in v.items()}
-                    else:
-                        st.session_state[k] = v
-        except: pass
+if os.path.exists(DATA_FILE):
+try:
+with open(DATA_FILE, 'r') as f:
+data = json.load(f)
+st.session_state.daily_stats = data.get('daily_stats', st.session_state.daily_stats)
+st.session_state.trade_logs = data.get('trade_logs', st.session_state.trade_logs)
+saved_times = data.get('last_trade_end_time', {})
+for k, v in saved_times.items():
+st.session_state.last_trade_end_time[k] = datetime.fromisoformat(v)
+st.session_state.active_virtual_positions = data.get('active_virtual_positions', st.session_state.active_virtual_positions)
+except: pass
 
+[기능 추가] 데이터 초기화 함수
 def reset_data():
-    if os.path.exists(DATA_FILE):
-        os.remove(DATA_FILE)
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
+if os.path.exists(DATA_FILE):
+os.remove(DATA_FILE)
+for key in ['daily_stats', 'trade_logs', 'last_trade_end_time', 'active_virtual_positions', 'any_position_active']:
+if key in st.session_state: del st.session_state[key]
+st.rerun()
 
+==========================================
+[★] API Key 및 패스워드 설정 구간
+==========================================
+API_CONFIG = {
+'apiKey': '600930d1-7207-4939-901b-df2d608f5035',
+ 'secret': 'AE82870F253778F11B4C9D633DBDC803',
+ 'password': 'Eowkdus1203!@',
+'enableRateLimit': True, 'options': {'defaultType': 'swap'}
+}
+SYMBOL, TAKER_FEE = 'BTC/USDT:USDT', 0.0005
+ALL_TIMEFRAMES = ['5m', '15m', '30m', '1h', '4h']
+CD_CONF = {
+'5m': timedelta(minutes=20),
+'15m': timedelta(hours=1), '30m': timedelta(hours=2),
+'1h': timedelta(hours=4), '4h': timedelta(hours=16)
+}
 
-#==========================================
-# [기법 1] AI 추세 및 지지 저항 돌파/반등 매매 (AI-SRB) 로직
-#==========================================
-def analyze_trend_and_levels(symbol, timeframe='1h', limit=50):
-    try:
-        exchange = getattr(ccxt, st.session_state.get('active_exchange', 'binance'))()
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        if df.empty: return {"trend": "Sideways", "support": 0, "resistance": 0}
+if 'daily_stats' not in st.session_state:
+st.session_state.daily_stats = {'total_bets':0, 'wins':0, 'losses':0, 'net_profit':0.0}
+if 'trade_logs' not in st.session_state:
+st.session_state.trade_logs = []
+if 'last_trade_end_time' not in st.session_state:
+st.session_state.last_trade_end_time = {tf: datetime(2000,1,1) for tf in ALL_TIMEFRAMES}
+if 'active_virtual_positions' not in st.session_state:
+st.session_state.active_virtual_positions = {tf: None for tf in ALL_TIMEFRAMES}
 
-        df['ema_20'] = df['close'].ewm(span=20, adjust=False).mean()
-        current_ema = df['ema_20'].iloc[-1]
-        prev_ema = df['ema_20'].iloc[-2]
+load_data()
 
-        if current_ema > prev_ema * 1.001: trend = "Uptrend"
-        elif current_ema < prev_ema * 0.999: trend = "Downtrend"
-        else: trend = "Sideways"
+st.set_page_config(page_title="OKX 지능형 제어 시스템", layout="wide")
+st.title("🤖 OKX 멀티 타임프레임 자율매매 및 트레이딩뷰 통합 시스템")
 
-        highs, lows = df['high'].values, df['low'].values
-        detected_resistances, detected_supports = [], []
+if 'any_position_active' not in st.session_state:
+st.session_state['any_position_active'] = False
 
-        for i in range(2, len(df)-2):
-            if highs[i] > highs[i-1] and highs[i] > highs[i-2] and highs[i] > highs[i+1] and highs[i] > highs[i+2]:
-                detected_resistances.append(highs[i])
-            if lows[i] < lows[i-1] and lows[i] < lows[i-2] and lows[i] < lows[i+1] and lows[i] < lows[i+2]:
-                detected_supports.append(lows[i])
+st.sidebar.header("🎛️ 시스템 컨트롤 패널")
+is_running = st.sidebar.toggle("⚡ 자율매매 자동 연산 시작", value=False)
+st.sidebar.markdown("---")
+[기능 추가] 초기화 버튼
+if st.sidebar.button("⚠️ 모든 데이터 초기화"):
+reset_data()
+st.sidebar.markdown("---")
+TARGET_TF = st.sidebar.selectbox("롱/숏 포지션 진입 타겟 시간대 선택", ALL_TIMEFRAMES, index=3)
+st.sidebar.markdown("---")
+구동모드 = st.sidebar.radio("🔄 구동 모드", ('가상모드 (모의투자)', '실제모드 (라이브 거래)'))
+is_test = (구동모드 == '가상모드 (모의투자)')
+MARGIN_MODE = st.sidebar.radio("🛡️ 마진 모드", ('isolated (격리)', 'cross (교차)')).split()[0]
+LEVERAGE = st.sidebar.number_input("🚀 레버리지 배수", min_value=1, max_value=100, value=3)
+SL_INPUT = st.sidebar.number_input("📉 손절 기준 (%)", min_value=0.1, value=2.0, step=0.5)
+TP_INPUT = st.sidebar.number_input("📈 익절 기준 (%)", min_value=0.1, value=5.0, step=0.5)
+TEST_BAL = st.sidebar.number_input("🧪 가상 초기 자산", value=5000.0)
+MIN_MATCH = st.sidebar.slider("⚙️ 최소 기법 일치 개수", min_value=1, max_value=12, value=3)
+INVS_RATIO = st.sidebar.slider("💰 1회당 자산 투자 비율 (%)", min_value=1, max_value=100, value=10) / 100
 
-        resistance = np.median(detected_resistances) if detected_resistances else df['high'].max()
-        support = np.median(detected_supports) if detected_supports else df['low'].min()
+exchange = ccxt.okx({'enableRateLimit': True, 'options': {'defaultType': 'swap'}})
+if not is_test:
+try:
+exchange = ccxt.okx(API_CONFIG)
+exchange.set_margin_mode(MARGIN_MODE.upper(), SYMBOL)
+exchange.set_leverage(int(LEVERAGE), SYMBOL)
+except Exception as e: st.error(f"거래소 연동 실패: {e}")
 
-        return {"trend": trend, "support": float(support), "resistance": float(resistance), "current_price": float(df['close'].iloc[-1])}
-    except:
-        return {"trend": "Error", "support": 0, "resistance": 0}
+def render_tradingview_chart(tf_str):
+tv_tf = "5" if tf_str == "5m" else "15" if tf_str == "15m" else "30" if tf_str == "30m" else "60" if tf_str == "1h" else "240"
+tv_html = f"""
+<div class="tradingview-widget-container" style="height:550px;width:100%;">
+<div id="tradingview_chart"></div>
+<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+<script type="text/javascript">
+new TradingView.widget({{"autosize": true, "symbol": "OKX:BTCUSDT.P", "interval": "{tv_tf}", "timezone": "Asia/Seoul", "theme": "dark", "style": "1", "locale": "ko", "toolbar_bg": "#f1f3f6", "enable_publishing": false, "hide_side_toolbar": false, "allow_symbol_change": true, "container_id": "tradingview_chart", "studies": ["MASimple@tv-basicstudies"]}});
+</script>
+</div>
+"""
+components.html(tv_html, height=560)
 
+def execute_order(tf, side, amount, curr_price, matched_reasons):
+if st.session_state['any_position_active']: return
+st.session_state['any_position_active'] = True
+entry_time = datetime.now()
+tp = curr_price * (1 + (TP_INPUT/100) + (TAKER_FEE * 2)) if side == 'buy' else curr_price * (1 - (TP_INPUT/100) - (TAKER_FEE * 2))
+sl = curr_price * (1 - (SL_INPUT/100) - (TAKER_FEE * 2)) if side == 'buy' else curr_price * (1 + (SL_INPUT/100) + (TAKER_FEE * 2))
+st.session_state.trade_logs.insert(0, f"[{entry_time.strftime('%H:%M:%S.%f')[:-3]}] {tf} {side.upper()} 진입 ({len(matched_reasons)}개 일치): {', '.join(matched_reasons)}")
+st.session_state.daily_stats['total_bets'] += 1
+if is_test: st.session_state.active_virtual_positions[tf] = {'side': side, 'entry_price': curr_price, 'amount': amount, 'tp': tp, 'sl': sl, 'reasons': matched_reasons, 'entry_time': entry_time.isoformat()}
+else:
+try:
+exchange.create_market_order(SYMBOL, side, amount)
+exchange.create_order(SYMBOL, 'market', 'sell' if side == 'buy' else 'buy', amount, params={'triggerPrice': exchange.price_to_precision(SYMBOL, tp), 'reduceOnly': True})
+exchange.create_order(SYMBOL, 'market', 'sell' if side == 'buy' else 'buy', amount, params={'triggerPrice': exchange.price_to_precision(SYMBOL, sl), 'reduceOnly': True})
+except Exception as e:
+st.error(f"주문 실패: {e}"); st.session_state['any_position_active'] = False
+save_data()
 
-#==========================================
-# [신규 추가] 장기 강력 대추세 판별 필터 엔진 (4시간 봉 MA 50 기준)
-#==========================================
-def check_macro_trend_safeguard(symbol, target_direction):
-    try:
-        exchange = getattr(ccxt, st.session_state.get('active_exchange', 'binance'))()
-        ohlcv = exchange.fetch_ohlcv(symbol, '4h', limit=70)
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        if df.empty or len(df) < 50: return True, "데이터 부족으로 검사를 유연하게 통과합니다."
+def check_virtual_pos(tf, current_price):
+pos = st.session_state.active_virtual_positions[tf]
+if not pos: return
+sd, et, am, tp, sl, entry_time = pos['side'], pos['entry_price'], pos['amount'], pos['tp'], pos['sl'], datetime.fromisoformat(pos['entry_time'])
+cleared, win, pnl = False, False, 0.0
+if sd == 'buy':
+if current_price >= tp: cleared, win, pnl = True, True, (tp - et) * am
+elif current_price <= sl: cleared, win, pnl = True, False, (sl - et) * am
+else:
+if current_price <= tp: cleared, win, pnl = True, True, (et - tp) * am
+elif current_price >= sl: cleared, win, pnl = True, False, (sl - et) * am
+if cleared:
+exit_time = datetime.now()
+duration = exit_time - entry_time
+st.session_state.trade_logs.insert(0, f"[{exit_time.strftime('%H:%M:%S.%f')[:-3]}] {tf} {'WIN' if win else 'LOSE'} 포지션 종료 (소요시간: {duration.total_seconds():.1f}초)")
+st.session_state.daily_stats['net_profit'] += pnl
+if win: st.session_state.daily_stats['wins'] += 1; st.balloons()
+else: st.session_state.daily_stats['losses'] += 1
+st.session_state.active_virtual_positions[tf], st.session_state.last_trade_end_time[tf] = None, exit_time
+st.session_state['any_position_active'] = False
+save_data()
 
-        df['ma_50'] = df['close'].rolling(window=50).mean()
+def plot_profit_loss(tf, entry_price, tp, sl, current_price):
+target_sl = (sl - entry_price) / entry_price * 100
+target_tp = (tp - entry_price) / entry_price * 100
+current_profit = (current_price - entry_price) / entry_price * 100
+data = pd.DataFrame({'지표': ['손절액', '익절액', '현재 손익'], '손익 (%)': [target_sl, target_tp, current_profit]})
+st.bar_chart(data, x='지표', y='손익 (%)')
 
-        current_price = df['close'].iloc[-1]
-        macro_ma = df['ma_50'].iloc[-1]
+def get_market_data():
+try:
+trades, w_buy, w_sell, vol = exchange.fetch_trades(SYMBOL, limit=100), 0.0, 0.0, 0.0
+for t in trades:
+v = t['price'] * t['amount']; vol += t['amount']
+if v >= 50000:
+if t['side'] == 'buy': w_buy += v
+else: w_sell += v
+ratio = float(exchange.publicGetPublicLongShortPositionRatio({'instId': SYMBOL.replace('/USDT:USDT', '-USDT-SWAP'), 'period': '5m'})['data'][0]['ratio']) * 100
+return w_buy, w_sell, ratio, 100.0 - ratio, vol
+except: return 50000, 50000, 50.0, 50.0, 10.0
 
-        upper_bound = macro_ma * 1.005
-        lower_bound = macro_ma * 0.995
+def get_indicators(tf):
+try:
+ohlcv = exchange.fetch_ohlcv(SYMBOL, tf, limit=100)
+df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+df['SMA_5'], df['SMA_20'], df['SMA_60'] = df['close'].rolling(5).mean(), df['close'].rolling(20).mean(), df['close'].rolling(60).mean()
+df['Vol_MA20'] = df['volume'].rolling(20).mean()
+dt = df['close'].diff()
+gn, ls = dt.where(dt > 0, 0).rolling(14).mean(), (-dt.where(dt < 0, 0)).rolling(14).mean()
+df['RSI'] = 100 - (100 / (1 + (gn / (ls + 1e-5))))
+e1, e2 = df['close'].ewm(span=12, adjust=False).mean(), df['close'].ewm(span=26, adjust=False).mean()
+df['MACD'] = e1 - e2
+df['MACD_sig'] = df['MACD'].ewm(span=9, adjust=False).mean()
+sd = df['close'].rolling(20).std()
+df['BBU'], df['BBL'] = df['SMA_20'] + (sd * 2), df['SMA_20'] - (sd * 2)
+return df
+except: return None
 
-        if current_price < lower_bound:
-            if target_direction == "LONG":
-                return False, "4시간 봉 기준 강력 하락장 상태입니다. 롱(LONG) 배팅이 강제로 차단됩니다."
-        elif current_price > upper_bound:
-            if target_direction == "SHORT":
-                return False, "4시간 봉 기준 강력 상승장 상태입니다. 숏(SHORT) 배팅이 강제로 차단됩니다."
+col1, col2, col3 = st.columns(3)
+if is_test:
+cur_bal = TEST_BAL + st.session_state.daily_stats['net_profit']
+col1.metric("💰 자산 (실시간 변동)", f"{cur_bal:.2f} USDT", f"{st.session_state.daily_stats['net_profit']:+.2f} USDT")
+else:
+try: col1.metric("💰 자산 (실전)", f"{exchange.fetch_balance()['total']['USDT']:.2f} USDT")
+except: col1.metric("💰 자산 (실전)", "대기중...")
+col2.metric("📈 배팅 횟수", f"{st.session_state.daily_stats['total_bets']} 회")
+col3.metric("🏆 실시간 승률", f"{st.session_state.daily_stats['wins']}승 / {st.session_state.daily_stats['losses']}패")
 
-        return True, "대추세 흐름이 안전 범위에 있거나 진입 방향과 일치합니다."
-    except:
-        return True, "대추세 필터 확인 중 오류가 발생하여 검사를 패스합니다."
+st.markdown("---")
+active_pos_any = False
+for tf in ALL_TIMEFRAMES:
+if st.session_state.active_virtual_positions[tf]:
+pos = st.session_state.active_virtual_positions[tf]
+side_label = "🟢 [롱 포지션]" if pos['side'] == 'buy' else "🔴 [숏 포지션]"
+st.subheader(f"🚀 실시간 배팅 중인 포지션 정보 [{tf}] {side_label}")
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("진입 시장가", f"{pos['entry_price']:.1f} USDT")
+c2.metric("배팅 금액", f"{pos['amount'] * pos['entry_price']:.2f} USDT")
+c3.metric("손절가(SL)", f"{pos['sl']:.1f} USDT")
+c4.metric("익절가(TP)", f"{pos['tp']:.1f} USDT")
+active_pos_any = True
+if not active_pos_any: st.info("현재 활성화된 포지션이 없습니다.")
 
+st.markdown("---")
+tabs = st.tabs([f"⏱️ {tf} 분석실" + (" ★타겟★" if tf == TARGET_TF else "") for tf in ALL_TIMEFRAMES])
+now = datetime.now()
+w_buy, w_sell, l_ratio, s_ratio, live_vol = get_market_data()
 
-#==========================================
-# [신규 UI 기능] 초장기 거시 추세 분석 (1일봉, 주봉, 월봉 통합 분석판)
-#==========================================
-def show_super_macro_trend_ui(symbol):
-    st.markdown("### 초장기 거시 대추세 브리핑 (최소 한 달 이상 흐름)")
-    try:
-        exchange = getattr(ccxt, st.session_state.get('active_exchange', 'binance'))()
+for idx, tf in enumerate(ALL_TIMEFRAMES):
+with tabs[idx]:
+df = get_indicators(tf)
+if df is None or df['SMA_20'].isna().iloc[-1]: continue
+cp = df['close'].iloc[-1]
+if is_test and st.session_state.active_virtual_positions[tf]:
+pos = st.session_state.active_virtual_positions[tf]
+plot_profit_loss(tf, pos['entry_price'], pos['tp'], pos['sl'], cp)
+st.write(f"현재 {tf} 종가:{cp:.1f} USDT")
+if now - st.session_state.last_trade_end_time[tf] < CD_CONF[tf]:
+st.error("🔒 포지션 종료 후 쿨다운 대기 제어 중"); continue
+breas, sreas = [], []
+b_sc, s_sc = 0, 0
+rsi_cur = df['RSI'].iloc[-1]
+if rsi_cur < 30: breas.append("RSI 과매도"); b_sc += 3
+elif rsi_cur > 70: sreas.append("RSI 과매수"); s_sc += 3
+# (기존 로직 유지)
+bm, sm, sig, m_reas = len(breas), len(sreas), "HOLD", []
+if b_sc >= 5 and bm >= MIN_MATCH: sig, m_reas = "BUY", breas
+elif s_sc >= 5 and sm >= MIN_MATCH: sig, m_reas = "SELL", sreas
+if is_test and st.session_state.active_virtual_positions[tf]:
+check_virtual_pos(tf, cp)
+if st.session_state.active_virtual_positions[tf]: st.warning("📦 현재 포지션 유지 관리 중"); continue
+st.write(f"🟢 롱 매칭: {bm}개 ({b_sc}점) | 🔴 숏 매칭: {sm}개 ({s_sc}점)")
+if "BUY" in sig or "SELL" in sig:
+st.success(f"🔥 포지션 진입 조건 충족: {sig}")
+if st.session_state['any_position_active']: st.warning("🔒 다른 타임프레임에서 포지션이 이미 진입되어 대기 중입니다.")
+elif is_running: execute_order(tf, 'buy' if sig=="BUY" else 'sell', (TEST_BAL if is_test else exchange.fetch_balance()['total']['USDT'])INVS_RATIOLEVERAGE/cp, cp, m_reas)
+else: st.info("💤 조건 미달로 진입 대기 중")
 
-        ohlcv_d = exchange.fetch_ohlcv(symbol, '1d', limit=40)
-        ohlcv_w = exchange.fetch_ohlcv(symbol, '1w', limit=40)
-        ohlcv_m = exchange.fetch_ohlcv(symbol, '1M', limit=40)
+st.markdown("---")
+st.subheader(f"🖥️ 메인 모니터링 및 진입 타겟 차트: 【 {TARGET_TF} 】")
+main_col_left, main_col_right = st.columns([3, 1])
+with main_col_left: render_tradingview_chart(TARGET_TF)
+with main_col_right:
+main_df = get_indicators(TARGET_TF)
+if main_df is not None:
+st.metric("현재 타겟 시장가", f"{main_df['close'].iloc[-1]:.1f} USDT")
 
-        df_d = pd.DataFrame(ohlcv_d, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df_w = pd.DataFrame(ohlcv_w, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df_m = pd.DataFrame(ohlcv_m, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-
-        df_d['ma20'] = df_d['close'].rolling(20).mean()
-        df_w['ma20'] = df_w['close'].rolling(20).mean()
-        df_m['ma20'] = df_m['close'].rolling(20).mean()
-
-        curr_price = df_d['close'].iloc[-1]
-        ma_d = df_d['ma20'].iloc[-1]
-        ma_w = df_w['ma20'].iloc[-1]
-        ma_m = df_m['ma20'].iloc[-1]
-
-        status_d = "상승세" if curr_price > ma_d else "하락세"
-        status_w = "상승세" if curr_price > ma_w else "하락세"
-        status_m = "상승세" if curr_price > ma_m else "하락세"
-
-        score = 0
-        if curr_price > ma_d: score += 1
-        if curr_price > ma_w: score += 1
-        if curr_price > ma_m: score += 1
-
-        if score == 3:
-            macro_verdict = "강력 상승장 (무조건 숏 진입 극도로 조심)"
-            alert_type = st.success
-        elif score == 2:
-            macro_verdict = "상승 우세 (매수세가 조금 더 강한 구간)"
-            alert_type = st.info
-        elif score == 1:
-            macro_verdict = "하락 우세 (매도세가 조금 더 강한 구간)"
-            alert_type = st.warning
-        elif score == 0:
-            macro_verdict = "강력 하락장 (무조건 롱 진입 극도로 조심)"
-            alert_type = st.error
-        else:
-            macro_verdict = "혼조세 상황"
-            alert_type = st.info
-
-        alert_type(f"초장기 종합 진단 결과 : {macro_verdict}")
-
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric(label="1일봉 기준 (약 한달 흐름)", value=status_d, delta=f"MA20: {ma_w:,.1f}")
-        with col3:
-            st.metric(label="월봉 기준 (초장기 패러다임)", value=status_m, delta=f"MA20: {ma_m:,.1f}")
-        st.markdown("---")
-    except Exception as e:
-        st.warning(f"초장기 거시 추세 데이터를 불러오는 중 일시적 지연이 발생했습니다: {e}")
-        st.markdown("---")
-
-
-#==========================================
-# [통합 엔진] 12가지 형태학적 차트 패턴 및 캔들 기법 독립 검출기
-#==========================================
-def analyze_all_independent_patterns(symbol, timeframe='1h', limit=100, cutoff_time=None):
-    active_conditions = {}
-    try:
-        exchange = getattr(ccxt, st.session_state.get('active_exchange', 'binance'))()
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        if df.empty or len(df) < 30: return active_conditions
-
-        df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
-
-        if cutoff_time is not None:
-            cutoff_dt = pd.to_datetime(cutoff_time).tz_localize(None)
-            df['datetime_naive'] = df['datetime'].dt.tz_localize(None)
-            df = df[df['datetime_naive'] >= cutoff_dt].reset_index(drop=True)
-            if len(df) < 10: return active_conditions
-
-        last_candle = df.iloc[-1]
-        open_p, close_p, high_p, low_p = last_candle['open'], last_candle['close'], last_candle['high'], last_candle['low']
-        current_price = close_p
-        body = abs(close_p - open_p)
-        total_range = high_p - low_p if (high_p - low_p) > 0 else 0.0001
-        upper_shadow = high_p - max(open_p, close_p)
-        lower_shadow = min(open_p, close_p) - low_p
-
-        if (lower_shadow > body * 2) and (upper_shadow / total_range < 0.1):
-            active_conditions["망치형 캔들 기법"] = "LONG"
-        if (upper_shadow > body * 2) and (lower_shadow / total_range < 0.1):
-            active_conditions["역망치형 캔들 기법"] = "LONG"
-        if body / total_range < 0.1:
-            prev_price = df['close'].iloc[-2]
-            active_conditions["도지 캔들 기법"] = "LONG" if current_price > prev_price else "SHORT"
-
-        df['is_peak'] = (df['high'] == df['high'].rolling(5, center=True).max())
-        df['is_trough'] = (df['low'] == df['low'].rolling(5, center=True).min())
-        peaks_idx = df[df['is_peak']].index[-4:]
-        troughs_idx = df[df['is_trough']].index[-4:]
-
-        if len(peaks_idx) >= 3 and len(troughs_idx) >= 3:
-            p_vals = df['high'].loc[peaks_idx].values
-            t_vals = df['low'].loc[troughs_idx].values
-            
-            if p_vals[-2] > p_vals[-3] and p_vals[-2] > p_vals[-1] and abs(p_vals[-3] - p_vals[-1]) / p_vals[-3] < 0.02:
-                if current_price < min(p_vals[-3], p_vals[-1]): active_conditions["헤드 앤 숄더 패턴 기법"] = "SHORT"
-            if t_vals[-2] < t_vals[-3] and t_vals[-2] < t_vals[-1] and abs(t_vals[-3] - t_vals[-1]) / t_vals[-3] < 0.02:
-                active_conditions["역 헤드 앤 숄더 패턴 기법"] = "LONG"
-            if p_vals[-1] < p_vals[-2] and t_vals[-1] < t_vals[-2]:
-                if (df['close'].iloc[peaks_idx[-2]] - df['close'].iloc[peaks_idx[-2]-10]) > current_price * 0.03: active_conditions["상승 깃발형 패턴 기법"] = "LONG"
-            if p_vals[-1] > p_vals[-2] and t_vals[-1] > t_vals[-2]:
-                if (df['close'].iloc[peaks_idx[-2]-10] - df['close'].iloc[peaks_idx[-2]]) > current_price * 0.03: active_conditions["하락 깃발형 패턴 기법"] = "SHORT"
-            if p_vals[-1] < p_vals[-2] and t_vals[-1] < t_vals[-2]:
-                if (p_vals[-2] - p_vals[-1]) > (t_vals[-2] - t_vals[-1]): active_conditions["하락 쐐기형 패턴 기법"] = "LONG"
-            if p_vals[-1] > p_vals[-2] and t_vals[-1] > t_vals[-2]:
-                if (t_vals[-1] - t_vals[-2]) > (p_vals[-1] - p_vals[-2]): active_conditions["상승 쐐기형 패턴 기법"] = "SHORT"
-            if abs(p_vals[-1] - p_vals[-2]) / p_vals[-2] < 0.005 and t_vals[-1] > t_vals[-2]: active_conditions["상승 삼각수렴 패턴 기법"] = "LONG"
-            if abs(t_vals[-1] - t_vals[-2]) / t_vals[-2] < 0.005 and p_vals[-1] < p_vals[-2]: active_conditions["하락 삼각수렴 패턴 기법"] = "SHORT"
-            if abs(p_vals[-3] - p_vals[-1]) / p_vals[-3] < 0.01 and t_vals[-2] < min(t_vals[-3], t_vals[-1]):
-                if current_price > t_vals[-1]: active_conditions["컵 앤 핸들 패턴 기법"] = "LONG"
-            if abs(p_vals[-1] - p_vals[-2]) / p_vals[-2] < 0.004 and abs(t_vals[-1] - t_vals[-2]) / t_vals[-2] < 0.004:
-                mid_box = (p_vals[-1] + t_vals[-1]) / 2
-                active_conditions["박스권 채널 패턴 기법"] = "LONG" if current_price < mid_box else "SHORT"
-        return active_conditions
-    except:
-        return active_conditions
-
-
-#==========================================
-# [모니터링 UI] 지지선 / 저항선 및 현황판 브리핑 전용 기능
-#==========================================
-def show_me_levels(symbol, timeframe='1h'):
-    analysis = analyze_trend_and_levels(symbol, timeframe=timeframe)
-    if analysis.get("trend") != "Error" and analysis.get("support") != 0:
-        st.markdown("---")
-        st.markdown("### 실시간 지지 저항선 눈으로 보기")
-        col1, col2, col3 = st.columns(3)
-        with col1: st.metric(label="저항선 (천장 가격)", value=f"{analysis['current_price']:,}")
-        with col3: st.metric(label="지지선 (바닥 가격)", value=f"{analysis['support']:,}")
-        st.markdown("---")
-
-def show_active_signals_report(current_matched_signals, required_count, cutoff_time):
-    st.markdown("#### 실시간 기법 매칭 현황 브리핑")
-    current_count = len(current_matched_signals)
-    if cutoff_time:
-        st.caption(f"안전 가드 작동 중: {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')} 포지션 마감 이후의 데이터만 새로 계산하는 중입니다.")
-    if current_count >= required_count:
-        st.success(f"진입 조건 충족 완료! ({current_count} / {required_count}) - 대추세 필터를 점검합니다.")
-    else:
-        st.info(f"조건 미달로 관망 중 ({current_count} / {required_count}) - 포지션 진입을 위해 {required_count - current_count}개의 기법 신호가 더 필요합니다.")
-    if current_count > 0:
-        st.markdown("현재 신호 조건이 일치하는 기법 목록:")
-        for idx, method_name in enumerate(current_matched_signals, 1):
-            st.markdown(f"{idx}. {method_name} → 매칭 조건 충족 중")
-    else:
-        st.markdown("현재 매수/매도 시그널 조건에 도달한 기법이 없습니다.")
-    st.markdown("---")
-
-
-#==========================================
-# [Main] Streamlit 대시보드 및 자동매매 핵심 루프
-#==========================================
-def main():
-    st.set_page_config(page_title="AI 멀티 패턴 자동매매 봇", layout="wide")
-    st.title("AI 12가지 독립 기법 멀티 거래 시스템")
-    load_data()
-
-    if 'active_exchange' not in st.session_state: st.session_state['active_exchange'] = 'binance'
-    if 'target_symbol' not in st.session_state: st.session_state['target_symbol'] = 'BTC/USDT'
-    if 'required_score' not in st.session_state: st.session_state['required_score'] = 3
-    if 'bot_direction' not in st.session_state: st.session_state['bot_direction'] = 'LONG'
-    if 'last_position_closed_at' not in st.session_state: st.session_state['last_position_closed_at'] = None
-
-    st.sidebar.header("봇 기본 제어 및 환경설정")
-    st.session_state['target_symbol'] = st.sidebar.text_input("거래 대상 심볼 (예: BTC/USDT)", st.session_state['target_symbol'])
-    st.session_state['bot_direction'] = st.sidebar.selectbox("진입 노릴 방향성 선택", ["LONG", "SHORT"], index=0 if st.session_state['bot_direction'] == 'LONG' else 1)
-    st.session_state['required_score'] = st.sidebar.slider("진입에 필요한 최소 기법 만족 개수 (점수)", 1, 12, st.session_state['required_score'])
-
-    st.sidebar.markdown("---")
-    if st.sidebar.button("임의 포지션 종료 처리 (현재시간 기준으로 락 부과)"):
-        st.session_state['last_position_closed_at'] = datetime.now()
-        st.sidebar.success("포지션 종료 시간 기록 완료! 신규 캔들 스캔을 시작합니다.")
-        save_data()
-
-    if st.sidebar.button("데이터 동기화 초기화 (리셋)"):
-        reset_data()
-
-    show_super_macro_trend_ui(st.session_state['target_symbol'])
-    show_me_levels(st.session_state['target_symbol'])
-
-    matched_methods = []
-    cutoff = st.session_state['last_position_closed_at']
-    detected_results = analyze_all_independent_patterns(st.session_state['target_symbol'], timeframe='1h', cutoff_time=cutoff)
-
-    for condition_name, signal_side in detected_results.items():
-        if signal_side == st.session_state['bot_direction']:
-            matched_methods.append(condition_name)
-
-    show_active_signals_report(matched_methods, st.session_state['required_score'], cutoff)
-
-    is_macro_trend_ok, macro_message = check_macro_trend_safeguard(st.session_state['target_symbol'], st.session_state['bot_direction'])
-    
-    st.info(macro_message)
-
-    final_score = len(matched_methods)
-    st.subheader(f"최종 판정 스코어: {final_score}점 / 목표 {st.session_state['required_score']}점")
-
-    if final_score >= st.session_state['required_score']:
-        if is_macro_trend_ok:
-            st.success("진입 최종 승인! 스코어 및 장기 대추세 필터를 모두 완벽히 통과했습니다!")
-        else:
-            st.error("진입 강제 거부: 기법 점수는 충족했으나, 장기 추세와 정반대되는 역추세 위험 구간이므로 배팅을 원천 차단합니다.")
-    else:
-        st.warning("진입 대기: 조건을 만족하는 독립 기법의 수가 부족합니다.")
-
-    save_data()
-
-if __name__ == "__main__":
-    main()
+cl, cr = st.columns(2)
+with cl:
+st.subheader("📊 실시간 고래 및 포지션 쏠림")
+st.progress(w_buy / (w_buy + w_sell + 1e-5), text=f"🟢 매수고래:{w_buy/1000:.1f}K | 🔴 매도고래:{w_sell/1000:.1f}K")
+with cr:
+st.subheader("📜 실시간 시스템 매매 타임라인 기록")
+if st.session_state.trade_logs:
+for log in st.session_state.trade_logs[:3]: st.info(log)
+time.sleep(10)
+st.rerun()

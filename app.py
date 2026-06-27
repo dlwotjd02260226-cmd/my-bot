@@ -2,19 +2,14 @@ import pandas as pd
 import time
 from datetime import datetime
 import ccxt
-import streamlit as st  # <--- 이 줄만 상단에 추가했습니다.
+import streamlit as st
 
 # --- API 설정 ---
-API_KEY = "600930d1-7207-4939-901b-df2d608f5035"
-SECRET_KEY = "AE82870F253778F11B4C9D633DBDC803"
-PASSPHRASE = "Eowkdus1203!@"
+API_KEY = "YOUR_API_KEY"
+SECRET_KEY = "YOUR_SECRET_KEY"
+PASSPHRASE = "YOUR_PASSPHRASE"
 
-exchange = ccxt.okx({
-    'apiKey': API_KEY,
-    'secret': SECRET_KEY,
-    'password': PASSPHRASE,
-    'options': {'defaultType': 'swap'}
-})
+exchange = ccxt.okx({'apiKey': API_KEY, 'secret': SECRET_KEY, 'password': PASSPHRASE, 'options': {'defaultType': 'swap'}})
 
 # --- 1. 시스템 통합 상태 관리 ---
 system_state = {
@@ -27,74 +22,44 @@ system_state = {
     "market_data": {"long_short_ratio": 0.5}
 }
 
-# --- 2. 시각화 및 유틸리티 ---
+# --- 2. [필수 로직] 함수 정의 (여기에 로직을 채우세요) ---
+def get_indicators(df): return df # 실제 지표 계산 로직 필요
+def process_strategies(df): return [], [], None # 실제 전략 로직 필요
+def is_pattern_forming(df): return False # 실제 패턴 판별 로직 필요
+def calculate_score(df): return 80 # 실제 점수 계산 로직 필요
+
+# --- 3. 시각화 및 유틸리티 ---
 def get_mobile_bar(val, max_val, segments=10):
     filled = min(int((val / max_val) * segments), segments)
     return f"|{'█'*filled}{'-'*(segments-filled)}|"
 
 def display_dashboard(current_price, current_score):
-    # 화면에 보이게 하려고 print를 st.write로 바꿨습니다.
-    st.write("="*35)
-    st.write(f" [관제탑] {datetime.now().strftime('%H:%M:%S')}")
-    st.write("="*35)
-    st.write(f" 가격: {current_price:,.2f} USDT")
-    st.write(f" 롱숏: {system_state['market_data']['long_short_ratio']:.2f} {get_mobile_bar(system_state['market_data']['long_short_ratio'], 1.0)}")
-    st.write(f" 점수: {current_score} / {system_state['min_entry_score']}")
-    st.write(f" 손절: {system_state['sl_percent']:.1f}% {get_mobile_bar(system_state['sl_percent'], 10.0)}")
-    st.write("="*35)
+    st.write("--- [실시간 관제탑] ---")
+    st.write(f"가격: {current_price:,.2f} USDT")
+    st.write(f"롱숏 비율: {system_state['market_data']['long_short_ratio']:.2f}")
+    st.write(f"점수: {current_score} / {system_state['min_entry_score']}")
+    st.write(f"손절: {system_state['sl_percent']:.1f}%")
 
-# --- 3. 통합 매매 엔진 ---
-def get_unified_signal(df, current_score):
-    if system_state['is_position_active']:
-        return None, None, None, None, 0
+# --- 4. 메인 실행부 ---
+st.title("🤖 자동 매매 봇 컨트롤러")
 
-    df = get_indicators(df)
-    last = df.iloc[-1]
-    long_signals, short_signals, detected_pattern = process_strategies(df)
-    
-    lsr = system_state['market_data']['long_short_ratio']
-    lsr_bonus_long = 10 if lsr < 0.5 else 0
-    lsr_bonus_short = 10 if lsr > 0.5 else 0
+# 사이드바 메뉴 구성
+st.sidebar.header("설정 메뉴")
+system_state['min_entry_score'] = st.sidebar.slider("진입 점수 기준", 0, 100, 70)
+system_state['sl_percent'] = st.sidebar.slider("손절 비율 (%)", 0.1, 10.0, 2.0)
 
-    if system_state['last_pattern_type'] is not None and detected_pattern == system_state['last_pattern_type']:
-        if is_pattern_forming(df): return None, None, None, None, 0
-        else: system_state['last_pattern_type'] = None
-
-    total_long = len(long_signals) + current_score + lsr_bonus_long
-    total_short = len(short_signals) + current_score + lsr_bonus_short
-    entry = last['close']
-
-    if total_long >= system_state['min_entry_score']:
-        tech_sl = df['low'].iloc[-10:].min()
-        percent_sl = entry * (1 - (system_state['sl_percent'] / 100))
-        sl = max(tech_sl, percent_sl)
-        tp = entry + (entry - sl) * 2
-        system_state.update({"is_position_active": True, "current_position": "LONG", "last_pattern_type": detected_pattern})
-        return "LONG", entry, sl, tp, (1000 * 0.02) / (entry - sl)
-
-    if total_short >= system_state['min_entry_score']:
-        tech_sl = df['high'].iloc[-10:].max()
-        percent_sl = entry * (1 + (system_state['sl_percent'] / 100))
-        sl = min(tech_sl, percent_sl)
-        tp = entry - (sl - entry) * 2
-        system_state.update({"is_position_active": True, "current_position": "SHORT", "last_pattern_type": detected_pattern})
-        return "SHORT", entry, sl, tp, (1000 * 0.02) / (sl - entry)
-
-    return None, None, None, None, 0
-
-# --- 4. 메인 시스템 루프 ---
-def run_trading_system():
-    # Streamlit 화면용 컨테이너
+if st.button("시스템 가동 시작"):
     placeholder = st.empty()
     while True:
         try:
-            # 데이터 수신 및 계산 로직...
-            # 결과값을 display_dashboard(price, score) 로 넘겨주면 화면에 뜹니다.
+            # 예시 데이터 (실제 데이터 로직으로 대체 필요)
+            price = 50000.0
+            score = calculate_score(pd.DataFrame())
+            
+            with placeholder.container():
+                display_dashboard(price, score)
+                
             time.sleep(2)
         except Exception as e:
-            st.write(f"오류 발생: {e}")
-            time.sleep(10)
-
-# 웹 페이지에 버튼 추가
-if st.button("시스템 가동 시작"):
-    run_trading_system()
+            st.error(f"오류: {e}")
+            break

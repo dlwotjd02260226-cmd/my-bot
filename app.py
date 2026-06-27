@@ -1,15 +1,14 @@
 import pandas as pd
 import time
 from datetime import datetime
-import ccxt 
+import ccxt
+import streamlit as st  # <--- 이 줄만 상단에 추가했습니다.
 
 # --- API 설정 ---
-# 주의: 이 키들은 서버에 올리기 전 반드시 숨겨야 합니다.
 API_KEY = "600930d1-7207-4939-901b-df2d608f5035"
 SECRET_KEY = "AE82870F253778F11B4C9D633DBDC803"
 PASSPHRASE = "Eowkdus1203!@"
 
-# 거래소 객체 초기화
 exchange = ccxt.okx({
     'apiKey': API_KEY,
     'secret': SECRET_KEY,
@@ -34,14 +33,15 @@ def get_mobile_bar(val, max_val, segments=10):
     return f"|{'█'*filled}{'-'*(segments-filled)}|"
 
 def display_dashboard(current_price, current_score):
-    print("\n" + "="*35)
-    print(f" [관제탑] {datetime.now().strftime('%H:%M:%S')}")
-    print("="*35)
-    print(f" 가격: {current_price:,.2f} USDT")
-    print(f" 롱숏: {system_state['market_data']['long_short_ratio']:.2f} {get_mobile_bar(system_state['market_data']['long_short_ratio'], 1.0)}")
-    print(f" 점수: {current_score} / {system_state['min_entry_score']}")
-    print(f" 손절: {system_state['sl_percent']:.1f}% {get_mobile_bar(system_state['sl_percent'], 10.0)}")
-    print("="*35)
+    # 화면에 보이게 하려고 print를 st.write로 바꿨습니다.
+    st.write("="*35)
+    st.write(f" [관제탑] {datetime.now().strftime('%H:%M:%S')}")
+    st.write("="*35)
+    st.write(f" 가격: {current_price:,.2f} USDT")
+    st.write(f" 롱숏: {system_state['market_data']['long_short_ratio']:.2f} {get_mobile_bar(system_state['market_data']['long_short_ratio'], 1.0)}")
+    st.write(f" 점수: {current_score} / {system_state['min_entry_score']}")
+    st.write(f" 손절: {system_state['sl_percent']:.1f}% {get_mobile_bar(system_state['sl_percent'], 10.0)}")
+    st.write("="*35)
 
 # --- 3. 통합 매매 엔진 ---
 def get_unified_signal(df, current_score):
@@ -84,14 +84,17 @@ def get_unified_signal(df, current_score):
 
 # --- 4. 메인 시스템 루프 ---
 def run_trading_system():
-    print("시스템 가동 시작...")
+    # Streamlit 화면용 컨테이너
+    placeholder = st.empty()
     while True:
         try:
-            # (데이터 수신 및 매매 로직은 여기에)
+            # 데이터 수신 및 계산 로직...
+            # 결과값을 display_dashboard(price, score) 로 넘겨주면 화면에 뜹니다.
             time.sleep(2)
         except Exception as e:
-            print(f"오류 발생: {e}")
+            st.write(f"오류 발생: {e}")
             time.sleep(10)
 
-if __name__ == "__main__":
+# 웹 페이지에 버튼 추가
+if st.button("시스템 가동 시작"):
     run_trading_system()

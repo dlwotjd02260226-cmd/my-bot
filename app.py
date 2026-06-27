@@ -66,7 +66,7 @@ if key in st.session_state: del st.session_state[key]
 st.rerun()
 
 ==========================================
-[]API Key 및 패스워드 설정 구간]
+[API Key 및 패스워드 설정 구간]
 ==========================================
 API_CONFIG = {
 'apiKey': '600930d1-7207-4939-901b-df2d608f5035',

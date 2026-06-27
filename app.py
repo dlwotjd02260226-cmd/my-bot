@@ -37,7 +37,7 @@ def show_super_macro_trend_ui(symbol):
 
 
 
-[기능 추가] 데이터 영구 저장을 위한 설정
+#[기능 추가] 데이터 영구 저장을 위한 설정
 DATA_FILE = "trading_data.json"
 
 def save_data():
@@ -70,9 +70,9 @@ for key in ['daily_stats', 'trade_logs', 'last_trade_end_time', 'active_virtual_
 if key in st.session_state: del st.session_state[key]
 st.rerun()
 
-==========================================
+#==========================================
 [API Key 및 패스워드 설정 구간]
-==========================================
+#==========================================
 API_CONFIG = {
 'apiKey': '600930d1-7207-4939-901b-df2d608f5035',
  'secret': 'AE82870F253778F11B4C9D633DBDC803',

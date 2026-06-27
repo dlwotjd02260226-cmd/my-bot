@@ -86,7 +86,7 @@ return {"trend": "Error", "support": 0, "resistance": 0}
 
 
 ==========================================
-🛡️ [신규 추가] 장기 강력 대추세 판별 필터 엔진 (4시간 봉 MA 50 기준)
+ [신규 추가] 장기 강력 대추세 판별 필터 엔진 (4시간 봉 MA 50 기준)
 ==========================================
 def check_macro_trend_safeguard(symbol, target_direction):
 try:

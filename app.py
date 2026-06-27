@@ -5,9 +5,9 @@ import streamlit as st, ccxt, time, pandas as pd, numpy as np
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 
-==========================================
+#==========================================
 [시스템 기능] 데이터 영구 저장을 위한 설정
-==========================================
+#==========================================
 DATA_FILE = "trading_data.json"
 
 def save_data():
@@ -50,9 +50,9 @@ del st.session_state[key]
 st.rerun()
 
 
-==========================================
+#==========================================
 [기법 1] AI 추세 및 지지·저항 돌파/반등 매매 (AI-SRB) 로직
-==========================================
+#==========================================
 def analyze_trend_and_levels(symbol, timeframe='1h', limit=50):
 try:
 exchange = getattr(ccxt, st.session_state.get('active_exchange', 'binance'))()
@@ -85,9 +85,9 @@ except:
 return {"trend": "Error", "support": 0, "resistance": 0}
 
 
-==========================================
+#==========================================
  [신규 추가] 장기 강력 대추세 판별 필터 엔진 (4시간 봉 MA 50 기준)
-==========================================
+#==========================================
 def check_macro_trend_safeguard(symbol, target_direction):
 try:
 exchange = getattr(ccxt, st.session_state.get('active_exchange', 'binance'))()
@@ -115,9 +115,9 @@ except:
 return True, "⚠️ 대추세 필터 확인 중 오류가 발생하여 검사를 패스합니다."
 
 
-==========================================
+#==========================================
  [신규 UI 기능] 초장기 거시 추세 분석 (1일봉, 주봉, 월봉 통합 분석판)
-==========================================
+#==========================================
 def show_super_macro_trend_ui(symbol):
 st.markdown("### 🗺️ 초장기 거시 대추세 브리핑 (최소 한 달 이상 흐름)")
 try:
@@ -184,9 +184,9 @@ st.warning(f"⚠️ 초장기 거시 추세 데이터를 불러오는 중 일시
 st.markdown("---")
 
 
-==========================================
+#==========================================
 [통합 엔진] 12가지 형태학적 차트 패턴 및 캔들 기법 독립 검출기
-==========================================
+#==========================================
 def analyze_all_independent_patterns(symbol, timeframe='1h', limit=100, cutoff_time=None):
 active_conditions = {}
 
@@ -296,9 +296,9 @@ except:
 return active_conditions
 
 
-==========================================
+#==========================================
 [모니터링 UI] 지지선 / 저항선 및 현황판 브리핑 전용 기능
-==========================================
+#==========================================
 def show_me_levels(symbol, timeframe='1h'):
 analysis = analyze_trend_and_levels(symbol, timeframe=timeframe)
 if analysis.get("trend") != "Error" and analysis.get("support") != 0:
@@ -330,9 +330,9 @@ st.markdown("⚠️ 현재 매수/매도 시그널 조건에 도달한 기법이
 st.markdown("---")
 
 
-==========================================
+#==========================================
 [Main] Streamlit 대시보드 및 자동매매 핵심 루프
-==========================================
+#==========================================
 def main():
 st.set_page_config(page_title="AI 멀티 패턴 자동매매 봇", layout="wide")
 st.title("🤖 AI 12가지 독립 기법 멀티 거래 시스템")

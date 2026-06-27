@@ -6,30 +6,35 @@ import streamlit as st, ccxt, time, pandas as pd, numpy as np
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 
-#--- [추가 시작] ---
+# --- [추가 시작] ---
 def check_macro_trend_safeguard(symbol, target_direction):
-try:
-     exchange = ccxt.okx()
-     ohlcv = exchange.fetch_ohlcv(symbol, '4h', limit=70)
-     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-     df['ma_50'] = df['close'].rolling(window=50).mean()
-     curr_p, ma = df['close'].iloc[-1], df['ma_50'].iloc[-1]
-     if curr_p < ma * 0.995 and target_direction == "LONG": return False, "하락장 진입으로 롱 배팅 차단"
-     elif curr_p > ma * 1.005 and target_direction == "SHORT": return False, "상승장 진입으로 숏 배팅 차단"
-     return True, "거시 추세 안전"
-     except: return True, "필터 검사 오류"
+    try:
+        exchange = ccxt.okx()
+        ohlcv = exchange.fetch_ohlcv(symbol, '4h', limit=70)
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['ma_50'] = df['close'].rolling(window=50).mean()
+        curr_p, ma = df['close'].iloc[-1], df['ma_50'].iloc[-1]
+        if curr_p < ma * 0.995 and target_direction == "LONG": 
+            return False, "하락장 진입으로 롱 배팅 차단"
+        elif curr_p > ma * 1.005 and target_direction == "SHORT": 
+            return False, "상승장 진입으로 숏 배팅 차단"
+        return True, "거시 추세 안전"
+    except Exception as e: 
+        return True, "필터 검사 오류"
 
-     def show_super_macro_trend_ui(symbol):
-     st.markdown("### 초장기 거시 대추세 브리핑")
-try:
-     exchange = ccxt.okx()
-     for tf in ['1d', '1w', '1M']:
-     ohlcv = exchange.fetch_ohlcv(symbol, tf, limit=40)
-     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-     df['ma20'] = df['close'].rolling(20).mean()
-     st.write(f"{tf} 상태: {'상승' if df['close'].iloc[-1] > df['ma20'].iloc[-1] else '하락'}")
-     except: pass
-#--- [추가 끝] ---
+def show_super_macro_trend_ui(symbol):
+    st.markdown("### 초장기 거시 대추세 브리핑")
+    try:
+        exchange = ccxt.okx()
+        for tf in ['1d', '1w', '1M']:
+            ohlcv = exchange.fetch_ohlcv(symbol, tf, limit=40)
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['ma20'] = df['close'].rolling(20).mean()
+            st.write(f"{tf} 상태: {'상승' if df['close'].iloc[-1] > df['ma20'].iloc[-1] else '하락'}")
+    except Exception as e: 
+        pass
+# --- [추가 끝] ---
+
 
 
 [기능 추가] 데이터 영구 저장을 위한 설정

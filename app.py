@@ -6,7 +6,7 @@ import streamlit as st, ccxt, time, pandas as pd, numpy as np
 import streamlit.components.v1 as components
 from datetime import datetime, timedelta
 
---- [추가 시작] ---
+#--- [추가 시작] ---
 def check_macro_trend_safeguard(symbol, target_direction):
 try:
 exchange = ccxt.okx()
@@ -29,7 +29,7 @@ df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', '
 df['ma20'] = df['close'].rolling(20).mean()
 st.write(f"{tf} 상태: {'상승' if df['close'].iloc[-1] > df['ma20'].iloc[-1] else '하락'}")
 except: pass
---- [추가 끝] ---
+#--- [추가 끝] ---
 
 
 [기능 추가] 데이터 영구 저장을 위한 설정

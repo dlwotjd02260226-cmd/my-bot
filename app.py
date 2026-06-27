@@ -314,7 +314,7 @@ st.markdown("#### 🎯 실시간 기법 매칭 현황 브리핑")
 current_count = len(current_matched_signals)
 
 if cutoff_time:
-st.caption(f"🛡️ 안전 가드 작동 중: {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')} 포지션 마감 이후의 데이터만 새로 계산하는 중입니다.")
+st.caption(f"안전 가드 작동 중: {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')} 포지션 마감 이후의 데이터만 새로 계산하는 중입니다.")
 
 if current_count >= required_count:
 st.success(f"🔥 진입 조건 충족 완료! ({current_count} / {required_count}) - 대추세 필터를 점검합니다.")

@@ -18,15 +18,7 @@ def get_price():
 
 price = get_price()
 
-# 포지션별 청산가 계산 함수
-def calculate_liq_price(p, lev):
-    # 청산가 계산: 레버리지를 반영하여 마진 소진 시점 계산
-    if p['type'] == '롱':
-        return p['entry'] * (1 - (0.9 / lev)) # 0.9는 유지증거금 고려 예시
-    else:
-        return p['entry'] * (1 + (0.9 / lev))
-
-# 1. 자산 및 수익금 계산
+# 자산 계산
 total_pos_val = sum([p['amt'] * (price if p['type'] == '롱' else (2*p['entry'] - price)) for p in st.session_state.positions])
 total_asset = st.session_state.balance + total_pos_val
 pnl_amt = total_asset - 10000
@@ -36,24 +28,33 @@ st.metric("실시간 자산 (USDT)", f"{total_asset:,.2f}", f"{pnl_pct:+.2f}% ({
 
 # 청산가 표시
 if st.session_state.positions:
-    liq_prices = [calculate_liq_price(p, 10) for p in st.session_state.positions] # 기본 레버리지 10배 기준 예시
-    st.error(f"⚠️ 예상 청산가: {min(liq_prices):,.2f} USDT")
+    liq = min([p['entry'] * (1 - (0.8 / 20)) if p['type'] == '롱' else p['entry'] * (1 + (0.8 / 20)) for p in st.session_state.positions])
+    st.error(f"⚠️ 예상 청산가: {liq:,.2f} USDT")
 
-# 2. 컨트롤 영역
-lev = st.slider("레버리지 설정", 1, 125, 1)
-amt = st.number_input("배팅 금액 (USDT)", min_value=1, value=1000)
+# 컨트롤
+lev = st.slider("레버리지", 1, 125, 1)
+amt = st.number_input("금액 (USDT)", min_value=1, value=1000)
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    if st.button("롱 진입"):
-        if st.session_state.balance >= amt:
-            st.session_state.positions.append({'type': '롱', 'entry': price, 'amt': (amt*lev)/price})
-            st.session_state.balance -= amt
-            st.session_state.logs.append(f"롱 진입({lev}배) @ {price:,.0f}")
-            st.rerun()
-with col2:
-    if st.button("숏 진입"):
-        if st.session_state.balance >= amt:
-            st.session_state.positions.append({'type': '숏', 'entry': price, 'amt': (amt*lev)/price})
-            st.session_state.balance -= amt
-            st.session_state.logs.append(f"숏 진입({lev}배) @ {price:,.0f
+c1, c2, c3 = st.columns(3)
+if c1.button("롱 진입"):
+    if st.session_state.balance >= amt:
+        st.session_state.positions.append({'type': '롱', 'entry': price, 'amt': (amt*lev)/price})
+        st.session_state.balance -= amt
+        st.session_state.logs.append(f"롱({lev}배) @ {price:,.0f}")
+        st.rerun()
+if c2.button("숏 진입"):
+    if st.session_state.balance >= amt:
+        st.session_state.positions.append({'type': '숏', 'entry': price, 'amt': (amt*lev)/price})
+        st.session_state.balance -= amt
+        st.session_state.logs.append(f"숏({lev}배) @ {price:,.0f}")
+        st.rerun()
+if c3.button("포지션 종료"):
+    for p in st.session_state.positions:
+        profit = (p['amt'] * price) if p['type'] == '롱' else (p['amt'] * (2*p['entry'] - price))
+        st.session_state.balance += profit
+    st.session_state.positions = []
+    st.session_state.logs.append(f"종료 @ {price:,.0f}")
+    st.rerun()
+
+# 차트
+components.html('<div id="tv"></div><script src="https://s3.tradingview.com/tv.js"></script><script>new TradingView.widget({"width":"100%","height":

@@ -7,7 +7,7 @@ import streamlit.components.v1 as components
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
-# 세션 상태 초기화 (오류 방지)
+# 세션 상태 초기화
 if 'balance' not in st.session_state:
     st.session_state.balance = 10000.0
     st.session_state.positions = []
@@ -97,13 +97,4 @@ for log in reversed(st.session_state.logs[-10:]):
 
 # 실시간 업데이트
 time.sleep(1)
-st.rerun()
-    for p in st.session_state.positions:
-        st.info(f"{p['time']} | {p['type']} | 진입가: {p['entry']} | 증거금: {p['margin']} | 레버리지: {p['lev']}x")
-
-st.subheader("거래 로그")
-for log in reversed(st.session_state.logs[-10:]):
-    st.text(log)
-
-time.sleep(0.3)
 st.rerun()

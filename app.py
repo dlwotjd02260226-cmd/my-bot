@@ -7,16 +7,18 @@ import streamlit.components.v1 as components
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
-# [수정] 메시지 박스 마진 제거 및 고정 높이 설정을 위한 CSS
+# [수정] 메시지 영역 및 내부 경고창의 높이/마진을 강제로 고정하는 CSS
 st.markdown("""
     <style>
-    div[data-testid="stAlert"] {
+    .fixed-msg-area {
+        height: 70px;
         margin: 0px !important;
-        padding-top: 10px !important;
-        padding-bottom: 10px !important;
+        padding: 0px !important;
+        overflow: hidden;
     }
-    .msg-box-fixed {
-        height: 68px;
+    div[data-testid="stAlert"] {
+        margin-top: 0px !important;
+        margin-bottom: 0px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -80,10 +82,10 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
 amt = col2.number_input("증거금(USDT)", value=100.0)
 
-# [수정] 메시지 영역 높이 고정
+# [수정] 경고 메시지 영역: 고정된 높이의 컨테이너 사용
 msg_container = st.container()
 with msg_container:
-    st.markdown('<div class="msg-box-fixed">', unsafe_allow_html=True)
+    st.markdown('<div class="fixed-msg-area">', unsafe_allow_html=True)
     if st.session_state.msg:
         if st.session_state.msg_type == "success":
             st.success(st.session_state.msg)
@@ -185,3 +187,4 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
+

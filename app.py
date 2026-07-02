@@ -1,15 +1,29 @@
 import streamlit as st
 import requests
 import time
+import json
+import os
 from datetime import datetime
 import streamlit.components.v1 as components
 
-# 세션이 없으면 초기화 (새로고침해도 이 값이 유지됨)
-if 'balance' not in st.session_state: st.session_state.balance = 10000.0
-if 'positions' not in st.session_state: st.session_state.positions = [] 
-if 'logs' not in st.session_state: st.session_state.logs = []
+# --- 영구 데이터 저장 로직 ---
+DATA_FILE = "trading_data.json"
 
-st.set_page_config(page_title="BTC Bot", layout="centered")
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    return {"balance": 10000.0, "positions": [], "logs": []}
+
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f)
+
+# 데이터 불러오기
+data = load_data()
+if 'balance' not in st.session_state: st.session_state.balance = data["balance"]
+if 'positions' not in st.session_state: st.session_state.positions = data["positions"]
+if 'logs' not in st.session_state: st.session_state.logs = data["logs"]
 
 def get_price():
     try:
@@ -23,18 +37,12 @@ st.title("BTC 실시간 트레이딩")
 # 차트
 components.html("""<div id="tv"></div><script src="https://s3.tradingview.com/tv.js"></script><script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>""", height=260)
 
-# 실시간 평가 손익 계산
-total_pos_pnl = 0
-for p in st.session_state.positions:
-    diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
-    total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
+# 실시간 평가 손익
+total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
 
-# [자산 계산] 가용 잔액(balance) + 현재 평가 손익
 current_total = st.session_state.balance + total_pos_pnl
-
 st.metric("실시간 총 자산 (USDT)", f"{current_total:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{current_total - 10000.0:+.2f} USDT")
-st.write(f"현재가: {price:,.2f} USDT")
 
 # 컨트롤
 col_a, col_b = st.columns(2)
@@ -46,33 +54,29 @@ if c1.button("롱 진입", key="btn_long"):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
+        save_data({"balance": st.session_state.balance, "positions": st.session_state.positions, "logs": st.session_state.logs})
         st.rerun()
 
 if c2.button("숏 진입", key="btn_short"):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
+        save_data({"balance": st.session_state.balance, "positions": st.session_state.positions, "logs": st.session_state.logs})
         st.rerun()
 
-# 1. 포지션 종료 (잔액 유지)
 if st.button("❌ 포지션 종료", key="btn_close"):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-        log_entry = f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 진입@{p['entry']:.1f} → 종료@{price:.1f} | 결과: {pnl:+.2f} USDT"
-        st.session_state.logs.append(log_entry)
-        # 잔액에 증거금 + 수익 합산 (새로고침해도 이 값이 유지됨)
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 결과: {pnl:+.2f} USDT")
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
+    save_data({"balance": st.session_state.balance, "positions": st.session_state.positions, "logs": st.session_state.logs})
     st.rerun()
 
-# 2. 가상머니 초기화 (여기를 누르기 전까진 절대로 안 바뀜)
-if st.button("🔄 가상머니 초기화", key="btn_reset_all"):
-    st.session_state.balance = 10000.0
-    st.session_state.positions = []
-    st.session_state.logs = []
+if st.button("🔄 가상머니 초기화", key="btn_reset"):
+    save_data({"balance": 10000.0, "positions": [], "logs": []})
     st.rerun()
 
-# 로그 출력
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)

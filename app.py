@@ -69,7 +69,12 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
 amt = col2.number_input("증거금(USDT)", value=100.0)
 
-# 고정된 경고/상태 메시지 전용 공간 (이 칸은 항상 존재하여 UI 흔들림 방지)
+# [수정] 메시지 공간을 CSS로 강제 높이 지정 (빈 공간 고정)
+st.markdown("""
+<div style="height: 50px;">
+    <div id="msg_container"></div>
+</div>
+""", unsafe_allow_html=True)
 msg_placeholder = st.empty()
 
 # 자동 매매 섹션
@@ -164,3 +169,4 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
+

@@ -16,16 +16,16 @@ if 'balance' not in st.session_state:
     st.session_state.msg = None
     st.session_state.msg_type = None
 
-# [수정] CSS로 메시지 컨테이너 높이 및 마진 완벽 고정
+# [수정] CSS로 메시지 컨테이너 및 내부 경고창의 마진/패딩을 완벽 고정
 st.markdown("""
     <style>
     .fixed-msg-area {
-        height: 80px;
-        margin-bottom: 0px;
-        padding: 0px;
-        overflow: hidden;
+        height: 70px;
+        margin: 0px !important;
+        padding: 0px !important;
     }
     div[data-testid="stAlert"] {
+        margin-top: 0px !important;
         margin-bottom: 0px !important;
     }
     </style>
@@ -43,7 +43,7 @@ price = get_price()
 
 st.title("BTC 실시간 트레이딩")
 
-# [수정] 경고 메시지 영역을 최상단으로 배치하여 아래 버튼들 고정
+# [수정] 경고 메시지 영역 (고정된 높이와 마진 유지)
 msg_placeholder = st.container()
 with msg_placeholder:
     st.markdown('<div class="fixed-msg-area">', unsafe_allow_html=True)
@@ -75,7 +75,7 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
 amt = col2.number_input("증거금(USDT)", value=100.0)
 
-# 자동 매매 및 매매 버튼 섹션 (위치 고정)
+# 자동 매매 및 매매 버튼 섹션
 col_auto1, col_auto2 = st.columns(2)
 if st.session_state.auto_trading:
     col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)

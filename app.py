@@ -42,10 +42,12 @@ total_losses = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st
 st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{current_fluctuation:+.2f} USDT")
 
-# --- [추가] 누적 수익/손실 UI ---
-c1, c2 = st.columns(2)
-c1.metric("누적 수익", f"{total_wins:,.2f} USDT")
-c2.metric("누적 손실", f"{total_losses:,.2f} USDT")
+# --- [수정] 누적 수익/손실을 작게 한 줄로 표기 ---
+st.markdown(f"""
+<div style="font-size: 0.9em; margin-bottom: 20px;">
+    누적: <span style="color: green;">익절 {total_wins:,.2f}</span> / <span style="color: red;">손절 {total_losses:,.2f}</span> USDT
+</div>
+""", unsafe_allow_html=True)
 
 # 컨트롤
 col1, col2 = st.columns(2)

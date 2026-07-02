@@ -7,19 +7,21 @@ import streamlit.components.v1 as components
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
-# [수정] 메시지 영역 및 내부 경고창의 높이/마진을 강제로 고정하는 CSS
+# [수정] 메시지 영역 높이 고정 및 레이아웃 밀림 방지 CSS
 st.markdown("""
     <style>
     .fixed-msg-area {
         height: 70px;
-        margin: 0px !important;
-        padding: 0px !important;
-        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+        border-radius: 5px;
+        font-weight: bold;
+        width: 100%;
     }
-    div[data-testid="stAlert"] {
-        margin-top: 0px !important;
-        margin-bottom: 0px !important;
-    }
+    .msg-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .msg-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -82,19 +84,16 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
 amt = col2.number_input("증거금(USDT)", value=100.0)
 
-# [수정] 경고 메시지 영역: 고정된 높이의 컨테이너 사용
-msg_container = st.container()
-with msg_container:
-    st.markdown('<div class="fixed-msg-area">', unsafe_allow_html=True)
-    if st.session_state.msg:
-        if st.session_state.msg_type == "success":
-            st.success(st.session_state.msg)
-        else:
-            st.error(st.session_state.msg)
-        time.sleep(1)
-        st.session_state.msg = None 
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+# [수정] st.success/error 대신 HTML 직접 렌더링으로 고정
+msg_placeholder = st.empty()
+if st.session_state.msg:
+    c_class = "msg-success" if st.session_state.msg_type == "success" else "msg-error"
+    msg_placeholder.markdown(f'<div class="fixed-msg-area {c_class}">{st.session_state.msg}</div>', unsafe_allow_html=True)
+    time.sleep(1)
+    st.session_state.msg = None
+    st.rerun()
+else:
+    msg_placeholder.markdown('<div class="fixed-msg-area" style="background-color: transparent;"></div>', unsafe_allow_html=True)
 
 # 자동 매매 섹션
 col_auto1, col_auto2 = st.columns(2)
@@ -187,4 +186,3 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
-

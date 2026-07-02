@@ -54,15 +54,21 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10, key="lev")
 amt = col2.number_input("증거금(USDT)", value=100.0, key="amt")
 
-if st.button("롱 진입"):
+# [추가] 지정가 입력창 (현재가를 기본값으로 설정)
+limit_price = st.number_input("지정가 설정 (USDT)", value=price, step=10.0, key="limit_price")
+
+c1, c2 = st.columns(2)
+if c1.button("롱 진입"):
     if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
+        # 지정가(limit_price)를 진입가로 사용
+        st.session_state.positions.append({'type': '롱', 'entry': limit_price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
         st.rerun()
 
-if st.button("숏 진입"):
+if c2.button("숏 진입"):
     if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
+        # 지정가(limit_price)를 진입가로 사용
+        st.session_state.positions.append({'type': '숏', 'entry': limit_price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
         st.rerun()
 

@@ -47,27 +47,27 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 컨트롤 - 설정값
+# 컨트롤
 col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10, key="lev")
 amt = col2.number_input("증거금(USDT)", value=100.0, key="amt")
 
-# [수정] 롱/숏/종료 버튼 가로 배치
+# [수정] 롱, 숏, 종료 버튼을 한 줄에 가로로 배치
 b1, b2, b3 = st.columns(3)
 
-if b1.button("롱 진입"):
+if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
         st.rerun()
 
-if b2.button("숏 진입"):
+if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
         st.rerun()
 
-if b3.button("❌ 종료"):
+if b3.button("❌ 종료", use_container_width=True):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료: {pnl:+.2f} USDT")
@@ -75,7 +75,7 @@ if b3.button("❌ 종료"):
     st.session_state.positions = []
     st.rerun()
 
-if st.button("🔄 가상머니 초기화"):
+if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.balance = 10000.0
     st.session_state.positions = []
     st.session_state.logs = []

@@ -4,12 +4,12 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="BTC Bot", layout="centered")
-
-# --- 데이터 상태 관리 ---
+# 세션이 없으면 초기화 (새로고침해도 이 값이 유지됨)
 if 'balance' not in st.session_state: st.session_state.balance = 10000.0
 if 'positions' not in st.session_state: st.session_state.positions = [] 
 if 'logs' not in st.session_state: st.session_state.logs = []
+
+st.set_page_config(page_title="BTC Bot", layout="centered")
 
 def get_price():
     try:
@@ -29,9 +29,9 @@ for p in st.session_state.positions:
     diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
     total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
 
-# UI 배치
-# 총 자산: 현재 가용 잔액 + 평가 손익
+# [자산 계산] 가용 잔액(balance) + 현재 평가 손익
 current_total = st.session_state.balance + total_pos_pnl
+
 st.metric("실시간 총 자산 (USDT)", f"{current_total:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{current_total - 10000.0:+.2f} USDT")
 st.write(f"현재가: {price:,.2f} USDT")
@@ -54,18 +54,18 @@ if c2.button("숏 진입", key="btn_short"):
         st.session_state.balance -= amt
         st.rerun()
 
-# 1. 포지션 종료 (가상머니 유지, 포지션만 정리)
+# 1. 포지션 종료 (잔액 유지)
 if st.button("❌ 포지션 종료", key="btn_close"):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         log_entry = f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 진입@{p['entry']:.1f} → 종료@{price:.1f} | 결과: {pnl:+.2f} USDT"
         st.session_state.logs.append(log_entry)
-        # 잔액에 증거금 + 수익 합산
+        # 잔액에 증거금 + 수익 합산 (새로고침해도 이 값이 유지됨)
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
     st.rerun()
 
-# 2. 가상머니 초기화 (잔액과 로그를 완전히 리셋)
+# 2. 가상머니 초기화 (여기를 누르기 전까진 절대로 안 바뀜)
 if st.button("🔄 가상머니 초기화", key="btn_reset_all"):
     st.session_state.balance = 10000.0
     st.session_state.positions = []

@@ -80,6 +80,7 @@ if b1.button("롱 진입", use_container_width=True):
         st.rerun()
     else:
         st.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
+        time.sleep(1)
 
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
@@ -90,6 +91,7 @@ if b2.button("숏 진입", use_container_width=True):
         st.rerun()
     else:
         st.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
+        time.sleep(1)
 
 if b3.button("❌ 종료", use_container_width=True):
     for p in st.session_state.positions:
@@ -137,4 +139,3 @@ for log in reversed(st.session_state.logs[-10:]):
 # 실시간 업데이트 (0.3초)
 time.sleep(0.3)
 st.rerun()
-

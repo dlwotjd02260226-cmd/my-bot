@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import streamlit.components.v1 as components
-import time
 
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
@@ -16,62 +15,53 @@ def get_price():
         return float(r.json()['data'][0]['last'])
     except: return 0.0
 
-st.title("BTC 실시간 트레이딩")
+price = get_price()
 
-# 1. 차트
+# 1. 차트 (최상단)
 components.html("""
 <div id="tv"></div><script src="https://s3.tradingview.com/tv.js"></script>
 <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# 실시간 정보 업데이트 자리
-placeholder = st.empty()
+# 2. 자산 계산 및 표시
+total_pos_pnl = 0
+for p in st.session_state.positions:
+    diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
+    total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
 
-# 2. 컨트롤 버튼
+st.metric("실시간 자산 (USDT)", f"{st.session_state.balance + total_pos_pnl:,.2f}", f"{total_pos_pnl:+.2f} USDT")
+
+# 3. 포지션 상세
+for p in st.session_state.positions:
+    st.info(f"[{p['type']}] 진입가: {p['entry']:.0f} | 수익: {((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']:+.2f}")
+
+# 4. 컨트롤
 lev = st.slider("레버리지", 1, 125, 10)
 amt = st.number_input("증거금(USDT)", value=100)
 c1, c2, c3 = st.columns(3)
 
 if c1.button("롱 진입"):
-    p = {'type': '롱', 'entry': get_price(), 'margin': amt, 'lev': lev}
-    st.session_state.positions.append(p)
+    st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
     st.session_state.balance -= amt
-    st.session_state.logs.append(f"롱({lev}배) 진입 @ {p['entry']:.0f}")
+    st.session_state.logs.append(f"롱 진입({lev}배)")
+    st.rerun()
 if c2.button("숏 진입"):
-    p = {'type': '숏', 'entry': get_price(), 'margin': amt, 'lev': lev}
-    st.session_state.positions.append(p)
+    st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
     st.session_state.balance -= amt
-    st.session_state.logs.append(f"숏({lev}배) 진입 @ {p['entry']:.0f}")
+    st.session_state.logs.append(f"숏 진입({lev}배)")
+    st.rerun()
 if c3.button("포지션 종료"):
+    st.session_state.balance += (amt + total_pos_pnl)
     st.session_state.positions = []
-    st.session_state.logs.append("포지션 종료")
     st.rerun()
 
-# 3. 실시간 루프
-while True:
-    price = get_price()
-    total_pos_pnl = 0
-    with placeholder.container():
-        # 포지션 정보
-        for p in st.session_state.positions:
-            diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
-            pnl = (diff / p['entry']) * p['margin'] * p['lev']
-            total_pos_pnl += pnl
-            st.info(f"[{p['type']}] 진입가: {p['entry']:.0f} | 수익: {pnl:+.2f} USDT")
-        
-        st.metric("실시간 자산 (USDT)", f"{st.session_state.balance + total_pos_pnl:,.2f}", f"{total_pos_pnl:+.2f} USDT")
-        st.write(f"현재가: {price:,.2f} USDT")
-        
-        # 로그
-        st.caption("최근 거래 로그")
-        for log in reversed(st.session_state.logs[-3:]):
-            st.text(log)
+# 5. 초기화 및 로그
+if st.button("🔄 가상머니 초기화"):
+    st.session_state.balance = 10000.0
+    st.session_state.positions = []
+    st.session_state.logs = []
+    st.rerun()
 
-        # 초기화 버튼
-        if st.button("🔄 가상머니 초기화 (10,000 USDT)"):
-            st.session_state.balance = 10000.0
-            st.session_state.positions = []
-            st.session_state.logs = ["초기화 완료"]
-            st.rerun()
-    
-    time.sleep(0.3)
+st.caption("최근 거래 로그")
+for log in reversed(st.session_state.logs[-3:]):
+    st.text(log)

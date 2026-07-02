@@ -13,6 +13,8 @@ if 'balance' not in st.session_state:
     st.session_state.positions = []
     st.session_state.logs = []
     st.session_state.auto_trading = False
+    st.session_state.msg = None  # 메시지 내용
+    st.session_state.msg_type = None  # 메시지 타입
 
 # 시세 가져오기 함수
 def get_price():
@@ -69,8 +71,14 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
 amt = col2.number_input("증거금(USDT)", value=100.0)
 
-# [핵심 수정] 경고 메시지 고정 영역
-msg_area = st.container()
+# 경고 메시지 고정 영역
+msg_area = st.empty()
+if st.session_state.msg:
+    if st.session_state.msg_type == "success": msg_area.success(st.session_state.msg)
+    else: msg_area.error(st.session_state.msg)
+    time.sleep(1)
+    st.session_state.msg = None
+    st.rerun()
 
 # 자동 매매 섹션
 col_auto1, col_auto2 = st.columns(2)
@@ -78,12 +86,11 @@ if st.session_state.auto_trading:
     col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)
     if col_auto2.button("🔴 자동 매매 종료", use_container_width=True):
         st.session_state.auto_trading = False
-        msg_area.error("🔴 자동 매매가 종료되었습니다.")
-        time.sleep(1)
+        st.session_state.msg = "🔴 자동 매매가 종료되었습니다."
+        st.session_state.msg_type = "error"
         for p in st.session_state.positions:
             pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-            if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0:
-                pnl = -p['margin']
+            if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']
             st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 자동 종료({p['mode']}): {pnl:+.2f} USDT")
             st.session_state.balance += (p['margin'] + pnl)
         st.session_state.positions = []
@@ -91,8 +98,8 @@ if st.session_state.auto_trading:
 else:
     if col_auto1.button("🟢 자동 매매 시작", use_container_width=True):
         st.session_state.auto_trading = True
-        msg_area.success("🟢 자동 매매가 시작되었습니다.")
-        time.sleep(1)
+        st.session_state.msg = "🟢 자동 매매가 시작되었습니다."
+        st.session_state.msg_type = "success"
         st.rerun()
     col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
 
@@ -104,32 +111,35 @@ if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
-        msg_area.success("🟢 롱 포지션 진입 완료!")
-        time.sleep(1)
+        st.session_state.msg = "🟢 롱 포지션 진입 완료!"
+        st.session_state.msg_type = "success"
         st.rerun()
     else:
-        msg_area.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
-        time.sleep(1)
+        st.session_state.msg = f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)"
+        st.session_state.msg_type = "error"
+        st.rerun()
 
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
-        msg_area.error("🔴 숏 포지션 진입 완료!")
-        time.sleep(1)
+        st.session_state.msg = "🔴 숏 포지션 진입 완료!"
+        st.session_state.msg_type = "error"
         st.rerun()
     else:
-        msg_area.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
-        time.sleep(1)
+        st.session_state.msg = f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)"
+        st.session_state.msg_type = "error"
+        st.rerun()
 
 if b3.button("❌ 종료", use_container_width=True):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-        if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0:
-            pnl = -p['margin']
+        if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료({p['mode']}): {pnl:+.2f} USDT")
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
+    st.session_state.msg = "🔴 포지션 종료 하였습니다."
+    st.session_state.msg_type = "error"
     st.rerun()
 
 # 가상머니 초기화

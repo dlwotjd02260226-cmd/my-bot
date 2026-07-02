@@ -68,6 +68,9 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
 amt = col2.number_input("증거금(USDT)", value=100.0)
 
+# [수정] 경고창 전용 공간 확보
+msg_placeholder = st.empty()
+
 # 매매 버튼
 b1, b2, b3 = st.columns(3)
 
@@ -79,7 +82,7 @@ if b1.button("롱 진입", use_container_width=True):
         st.session_state.balance -= amt
         st.rerun()
     else:
-        st.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
+        msg_placeholder.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
         time.sleep(1)
 
 if b2.button("숏 진입", use_container_width=True):
@@ -90,22 +93,21 @@ if b2.button("숏 진입", use_container_width=True):
         st.session_state.balance -= amt
         st.rerun()
     else:
-        st.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
+        msg_placeholder.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
         time.sleep(1)
 
 if b3.button("❌ 종료", use_container_width=True):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-        
-        # 교차 모드 청산 로직
         if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0:
             pnl = -p['margin']
-            
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료({p['mode']}): {pnl:+.2f} USDT")
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
     st.rerun()
 
+# 가상머니 초기화 (공간 확보)
+st.write("") 
 if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.balance = 10000.0
     st.session_state.positions = []
@@ -118,10 +120,7 @@ if not st.session_state.positions:
     st.write("보유 포지션 없음")
 else:
     for p in st.session_state.positions:
-        # 청산가 계산
         liq_price = p['entry'] * (1 - (1 / p['lev'])) if p['type'] == '롱' else p['entry'] * (1 + (1 / p['lev']))
-        
-        # 시안성 높은 포지션 카드
         st.markdown(f"""
         <div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; margin-bottom: 5px;">
             <div style="font-weight: bold;">{p['time']} | {p['type']} ({p['mode']}) | {p['lev']}x</div>
@@ -136,6 +135,5 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 
-# 실시간 업데이트 (0.3초)
 time.sleep(0.3)
 st.rerun()

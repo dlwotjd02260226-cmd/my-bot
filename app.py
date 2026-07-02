@@ -4,15 +4,13 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 
-# [수정] 모바일에서 안정적인 외부 오디오 링크 방식
+# 소리 재생을 위한 함수 (모바일 강제 재생 방식)
 def play_sound(sound_type):
-    # 진입(in): 긍정적인 '띵' 효과음 / 종료(out): 경고성 '동' 효과음
     sound_url = "https://actions.google.com/sounds/v1/ui/positive_tap.ogg" if sound_type == 'in' else "https://actions.google.com/sounds/v1/ui/error.ogg"
-    
     js_code = f"""
     <script>
         var audio = new Audio('{sound_url}');
-        audio.play();
+        audio.play().catch(function(error) {{ console.log("재생 실패"); }});
     </script>
     """
     components.html(js_code, height=0)
@@ -67,19 +65,18 @@ amt = col2.number_input("증거금(USDT)", value=100.0, key="amt")
 
 # 롱, 숏, 종료 버튼 (가로 배치)
 b1, b2, b3 = st.columns(3)
-
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
-        play_sound('in') # 진입 알림
+        play_sound('in')
         st.rerun()
 
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
-        play_sound('in') # 진입 알림
+        play_sound('in')
         st.rerun()
 
 if b3.button("❌ 종료", use_container_width=True):
@@ -88,7 +85,7 @@ if b3.button("❌ 종료", use_container_width=True):
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료: {pnl:+.2f} USDT")
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
-    play_sound('out') # 종료 알림
+    play_sound('out')
     st.rerun()
 
 if st.button("🔄 가상머니 초기화", use_container_width=True):

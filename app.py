@@ -25,7 +25,7 @@ price = get_price()
 
 st.title("BTC 실시간 트레이딩")
 
-# 실전/가상 모드와 교차/격리 모드 라디오 버튼
+# 실전/가상 매매 및 교차/격리 모드 선택
 col_mode1, col_mode2 = st.columns(2)
 with col_mode1:
     mode_real = st.radio("매매 모드", ["가상 매매", "실전 매매"], key="is_real", horizontal=True)
@@ -112,7 +112,19 @@ if not st.session_state.positions:
     st.write("보유 포지션 없음")
 else:
     for p in st.session_state.positions:
-        st.info(f"{p['time']} | {p['type']} | {p['mode']} | 진입가: {p['entry']} | {p['lev']}x")
+        # 청산가 계산
+        liq_price = p['entry'] * (1 - (1 / p['lev'])) if p['type'] == '롱' else p['entry'] * (1 + (1 / p['lev']))
+        
+        # 시안성 높은 포지션 카드
+        st.markdown(f"""
+        <div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; margin-bottom: 5px;">
+            <div style="font-weight: bold;">{p['time']} | {p['type']} ({p['mode']}) | {p['lev']}x</div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>진입가: <b style="color: blue;">{p['entry']:.2f}</b></span>
+                <span>청산가: <b style="color: red;">{liq_price:.2f}</b></span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
@@ -121,3 +133,4 @@ for log in reversed(st.session_state.logs[-10:]):
 # 실시간 업데이트 (0.3초)
 time.sleep(0.3)
 st.rerun()
+

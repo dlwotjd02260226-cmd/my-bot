@@ -4,20 +4,6 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 
-# [핵심 수리] HTML/JS 통합 방식: 
-# 버튼 클릭 시 즉시 실행되도록 컴포넌트 호출 방식을 변경했습니다.
-def play_sound(sound_type):
-    sound_url = "https://actions.google.com/sounds/v1/ui/positive_tap.ogg" if sound_type == 'in' else "https://actions.google.com/sounds/v1/ui/error.ogg"
-    
-    # 버튼 클릭 시 브라우저가 직접 소리를 실행하게 만듦
-    js_code = f"""
-    <script>
-        var audio = new Audio('{sound_url}');
-        audio.play();
-    </script>
-    """
-    return components.html(js_code, height=0)
-
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
 if 'init' not in st.session_state:
@@ -66,21 +52,19 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10, key="lev")
 amt = col2.number_input("증거금(USDT)", value=100.0, key="amt")
 
-# 롱, 숏, 종료 버튼 (가로 배치)
+# [수정] 롱, 숏, 종료 버튼을 한 줄에 가로로 배치
 b1, b2, b3 = st.columns(3)
 
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
-        play_sound('in')
         st.rerun()
 
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
-        play_sound('in')
         st.rerun()
 
 if b3.button("❌ 종료", use_container_width=True):
@@ -89,9 +73,15 @@ if b3.button("❌ 종료", use_container_width=True):
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료: {pnl:+.2f} USDT")
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
-    play_sound('out')
     st.rerun()
-    st.subheader("거래 로그")
+
+if st.button("🔄 가상머니 초기화", use_container_width=True):
+    st.session_state.balance = 10000.0
+    st.session_state.positions = []
+    st.session_state.logs = []
+    st.rerun()
+
+st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 

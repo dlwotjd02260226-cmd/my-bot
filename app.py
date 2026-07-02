@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import streamlit.components.v1 as components
+import time
 from datetime import datetime
 
 st.set_page_config(page_title="BTC Bot", layout="centered")
@@ -12,11 +13,11 @@ if 'logs' not in st.session_state: st.session_state.logs = []
 
 def get_price():
     try:
-        r = requests.get("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", timeout=2)
+        r = requests.get("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", timeout=0.5)
         return float(r.json()['data'][0]['last'])
     except: return 0.0
 
-price = get_price()
+st.title("BTC 실시간 트레이딩")
 
 # 1. 차트
 components.html("""
@@ -24,52 +25,66 @@ components.html("""
 <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# 2. 손익 계산
-total_pos_pnl = 0
-for p in st.session_state.positions:
-    diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
-    total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
+# 실시간 업데이트를 위한 컨테이너
+placeholder = st.empty()
 
-# 시작금(10,000)에서 실시간 손익을 더하거나 뺌
-current_total_asset = 10000.0 + (st.session_state.balance - 10000.0) + total_pos_pnl
-
-st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}", f"{total_pos_pnl:+.2f} USDT")
-
-# 3. 컨트롤 버튼
+# 2. 컨트롤 버튼
 lev = st.slider("레버리지", 1, 125, 10, key="lev_s")
 amt = st.number_input("증거금(USDT)", value=100, key="amt_i")
 
 c1, c2, c3 = st.columns(3)
 if c1.button("롱 진입", key="btn_long"):
-    st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
+    st.session_state.positions.append({'type': '롱', 'entry': get_price(), 'margin': amt, 'lev': lev})
     st.session_state.balance -= amt
     st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 롱 진입({lev}배)")
     st.rerun()
 
 if c2.button("숏 진입", key="btn_short"):
-    st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
+    st.session_state.positions.append({'type': '숏', 'entry': get_price(), 'margin': amt, 'lev': lev})
     st.session_state.balance -= amt
     st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 숏 진입({lev}배)")
     st.rerun()
 
 if c3.button("포지션 종료", key="btn_close"):
-    st.session_state.balance += (amt + total_pos_pnl)
-    st.session_state.positions = []
-    st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 포지션 종료")
+    # (종료 로직은 아래 while 루프에서 계산된 수익을 반영)
     st.rerun()
 
-# 4. 포지션 상세
-for p in st.session_state.positions:
-    pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-    st.info(f"[{p['type']}] 진입가: {p['entry']:.0f} | 수익: {pnl:+.2f} USDT")
+# 3. 실시간 업데이트 루프 (에러 방지를 위해 여기서는 버튼 클릭 방지)
+while True:
+    price = get_price()
+    total_pos_pnl = 0
+    for p in st.session_state.positions:
+        diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
+        total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
+    
+    # [핵심] 10,000에서 시작해 실시간으로 변동된 최종 자산
+    current_asset = 10000.0 + (st.session_state.balance - 10000.0) + total_pos_pnl
+    
+    with placeholder.container():
+        st.metric("실시간 총 자산 (USDT)", f"{current_asset:,.2f}", f"{current_asset - 10000.0:+.2f} USDT")
+        st.write(f"현재가: {price:,.2f} USDT")
+        
+        # 포지션 정보
+        for p in st.session_state.positions:
+            pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
+            st.info(f"[{p['type']}] 수익: {pnl:+.2f} USDT")
 
-# 5. 로그 및 초기화
-st.caption("최근 거래 로그")
-for log in reversed(st.session_state.logs[-5:]):
-    st.text(log)
+    # 포지션 종료 버튼 (루프 밖으로 빼야 에러가 안남)
+    if st.button("🔄 포지션 종료 및 정산", key="btn_close_loop"):
+        st.session_state.balance += total_pos_pnl
+        st.session_state.positions = []
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 정산 완료")
+        st.rerun()
 
-if st.button("🔄 가상머니 초기화", key="btn_reset"):
-    st.session_state.balance = 10000.0
-    st.session_state.positions = []
-    st.session_state.logs = []
-    st.rerun()
+    # 초기화 버튼
+    if st.button("🔄 가상머니 초기화", key="btn_reset"):
+        st.session_state.balance = 10000.0
+        st.session_state.positions = []
+        st.session_state.logs = []
+        st.rerun()
+
+    st.caption("최근 거래 로그")
+    for log in reversed(st.session_state.logs[-5:]):
+        st.text(log)
+        
+    time.sleep(0.3)

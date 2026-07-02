@@ -26,13 +26,15 @@ for p in st.session_state.positions:
     diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
     total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
 
-# [위치 조정] 
-# 1. 실시간 총 자산 (가장 위에 크게)
-current_asset = 10000.0 + (st.session_state.balance - 10000.0) + total_pos_pnl
-st.metric("실시간 총 자산 (USDT)", f"{current_asset:,.2f}")
+# [핵심 수정] 변동 금액(USDT) 계산
+# 가용 잔액 변동분 + 현재 오픈 포지션의 수익/손실
+fluctuation = (st.session_state.balance - 10000.0) + total_pos_pnl
 
-# 2. 바로 밑에 변동 금액 (USDT)
-st.metric("현재 변동 금액 (USDT)", f"{current_asset - 10000.0:+.2f} USDT")
+# 1. 실시간 총 자산 (만 달러 기준 변동)
+st.metric("실시간 총 자산 (USDT)", f"{10000.0 + fluctuation:,.2f}")
+
+# 2. 바로 밑에 변동 금액 (따고/잃고 있는 금액)
+st.metric("변동 금액 (USDT)", f"{fluctuation:+.2f} USDT")
 
 st.write(f"현재가: {price:,.2f} USDT")
 
@@ -43,6 +45,7 @@ components.html("""<div id="tv"></div><script src="https://s3.tradingview.com/tv
 col_a, col_b = st.columns(2)
 lev = col_a.slider("레버리지", 1, 125, 10, key="slider_lev")
 amt = col_b.number_input("증거금(USDT)", value=100.0, key="input_amt")
+st.info(f"포지션 규모: {amt * lev:,.0f} USDT")
 
 c1, c2 = st.columns(2)
 if c1.button("롱 진입", key="btn_long"):

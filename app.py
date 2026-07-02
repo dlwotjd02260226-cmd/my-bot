@@ -29,10 +29,13 @@ st.title("BTC 실시간 트레이딩")
 # 실전/가상 모드 토글
 st.session_state.is_real_mode = st.toggle("실전 매매 모드 활성화", st.session_state.is_real_mode)
 
+# [딱 하나 추가] 교차/격리 모드 선택 버튼
+margin_mode = st.radio("증거금 모드", ["격리 (Isolated)", "교차 (Cross)"], horizontal=True, key="margin_mode")
+
 if st.session_state.is_real_mode:
-    st.error("🚨 실전 매매 모드입니다.")
+    st.error(f"🚨 실전 매매 모드 ({margin_mode}) 입니다.")
 else:
-    st.success("✅ 가상 매매 모드입니다.")
+    st.success(f"✅ 가상 매매 모드 ({margin_mode}) 입니다.")
 
 # 트레이딩뷰 위젯
 components.html("""
@@ -41,12 +44,12 @@ components.html("""
     <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# 데이터 계산
+# 자산 계산
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
 total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
 current_total_asset = st.session_state.balance + total_margin_in_pos + total_pos_pnl
 
-# 누적 수익/손실 계산 (다시 추가함!)
+# 누적 수익/손실 계산
 total_wins = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st.session_state.logs if float(log.split(": ")[-1].replace(" USDT", "")) > 0)
 total_losses = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st.session_state.logs if float(log.split(": ")[-1].replace(" USDT", "")) <= 0)
 
@@ -54,7 +57,6 @@ total_losses = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st
 st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{total_pos_pnl:+.2f} USDT")
 
-# [복구] 누적 수익/손실 표시줄
 st.markdown(f"""
 <div style="font-size: 0.9em; margin-bottom: 20px;">
     누적: <span style="color: green;">익절 {total_wins:,.2f}</span> / <span style="color: red;">손절 {total_losses:,.2f}</span> USDT
@@ -71,13 +73,13 @@ b1, b2, b3 = st.columns(3)
 
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
+        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': margin_mode, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
         st.rerun()
 
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
+        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': margin_mode, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
         st.rerun()
 
@@ -95,17 +97,18 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.logs = []
     st.rerun()
 
-# 보유 포지션 및 거래 로그
+# 로그 및 포지션 표시
 st.subheader("보유 중인 포지션")
 if not st.session_state.positions:
     st.write("보유 포지션 없음")
 else:
     for p in st.session_state.positions:
-        st.info(f"{p['time']} | {p['type']} | 진입가: {p['entry']} | 증거금: {p['margin']} | {p['lev']}x")
+        st.info(f"{p['time']} | {p['type']} | {p['mode']} | 진입가: {p['entry']} | {p['lev']}x")
 
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 
+# 실시간 업데이트
 time.sleep(0.3)
 st.rerun()

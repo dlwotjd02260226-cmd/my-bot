@@ -4,19 +4,15 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 
-# [추가] 브라우저 소리 재생을 위한 함수
+# [수정] 모바일에서 안정적인 외부 오디오 링크 방식
 def play_sound(sound_type):
-    # 진입(in): 880Hz / 종료(out): 440Hz
-    freq = 880 if sound_type == 'in' else 440
+    # 진입(in): 긍정적인 '띵' 효과음 / 종료(out): 경고성 '동' 효과음
+    sound_url = "https://actions.google.com/sounds/v1/ui/positive_tap.ogg" if sound_type == 'in' else "https://actions.google.com/sounds/v1/ui/error.ogg"
+    
     js_code = f"""
     <script>
-        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        var oscillator = audioCtx.createOscillator();
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime({freq}, audioCtx.currentTime);
-        oscillator.connect(audioCtx.destination);
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.2);
+        var audio = new Audio('{sound_url}');
+        audio.play();
     </script>
     """
     components.html(js_code, height=0)

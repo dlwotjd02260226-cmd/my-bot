@@ -9,6 +9,8 @@ st.set_page_config(page_title="BTC Bot", layout="centered")
 # --- 데이터 상태 관리 ---
 if 'balance' not in st.session_state: st.session_state.balance = 10000.0
 if 'positions' not in st.session_state: st.session_state.positions = [] 
+if 'logs' not in st.session_state: st.session_state.logs = []
+if 'total_realized_pnl' not in st.session_state: st.session_state.total_realized_pnl = 0.0
 
 def get_price():
     try:
@@ -20,26 +22,22 @@ price = get_price()
 
 st.title("BTC 실시간 트레이딩")
 
+# 차트
+components.html("""<div id="tv"></div><script src="https://s3.tradingview.com/tv.js"></script><script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>""", height=260)
+
 # 실시간 평가 손익 계산
 total_pos_pnl = 0
 for p in st.session_state.positions:
     diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
     total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
 
-# [핵심 수정] 변동 금액(USDT) 계산
-# 가용 잔액 변동분 + 현재 오픈 포지션의 수익/손실
-fluctuation = (st.session_state.balance - 10000.0) + total_pos_pnl
+# [핵심] 시작금 10,000 기준 자산 변동 로직
+# 가용 잔액(10,000에서 시작) + 실시간 평가 손익
+current_asset = 10000.0 + (st.session_state.balance - 10000.0) + total_pos_pnl
 
-# 1. 실시간 총 자산 (만 달러 기준 변동)
-st.metric("실시간 총 자산 (USDT)", f"{10000.0 + fluctuation:,.2f}")
-
-# 2. 바로 밑에 변동 금액 (따고/잃고 있는 금액)
-st.metric("변동 금액 (USDT)", f"{fluctuation:+.2f} USDT")
-
+# 실시간 총 자산 표시 (시작금 10,000 기준 증감)
+st.metric("실시간 총 자산 (USDT)", f"{current_asset:,.2f}", f"{current_asset - 10000.0:+.2f} USDT")
 st.write(f"현재가: {price:,.2f} USDT")
-
-# 차트
-components.html("""<div id="tv"></div><script src="https://s3.tradingview.com/tv.js"></script><script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>""", height=260)
 
 # 컨트롤
 col_a, col_b = st.columns(2)
@@ -53,15 +51,26 @@ if c1.button("롱 진입", key="btn_long"):
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
         st.rerun()
+    else: st.error("증거금 부족!")
 
 if c2.button("숏 진입", key="btn_short"):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
         st.rerun()
+    else: st.error("증거금 부족!")
+
+for p in st.session_state.positions:
+    pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
+    st.warning(f"[{p['type']}] 수익: {pnl:+.2f} USDT")
 
 if st.button("❌ 포지션 종료 및 정산하기", key="btn_settle"):
     st.session_state.balance += (sum(p['margin'] for p in st.session_state.positions) + total_pos_pnl)
+    st.session_state.positions = []
+    st.rerun()
+
+if st.button("🔄 가상머니 초기화", key="btn_reset"):
+    st.session_state.balance = 10000.0
     st.session_state.positions = []
     st.rerun()
 

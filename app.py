@@ -107,5 +107,5 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 
-time.sleep(1)
+time.sleep(0.3)
 st.rerun()

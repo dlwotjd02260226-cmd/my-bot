@@ -4,16 +4,19 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 
-# 소리 재생을 위한 함수 (모바일 강제 재생 방식)
+# [핵심 수리] HTML/JS 통합 방식: 
+# 버튼 클릭 시 즉시 실행되도록 컴포넌트 호출 방식을 변경했습니다.
 def play_sound(sound_type):
     sound_url = "https://actions.google.com/sounds/v1/ui/positive_tap.ogg" if sound_type == 'in' else "https://actions.google.com/sounds/v1/ui/error.ogg"
+    
+    # 버튼 클릭 시 브라우저가 직접 소리를 실행하게 만듦
     js_code = f"""
     <script>
         var audio = new Audio('{sound_url}');
-        audio.play().catch(function(error) {{ console.log("재생 실패"); }});
+        audio.play();
     </script>
     """
-    components.html(js_code, height=0)
+    return components.html(js_code, height=0)
 
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
@@ -65,6 +68,7 @@ amt = col2.number_input("증거금(USDT)", value=100.0, key="amt")
 
 # 롱, 숏, 종료 버튼 (가로 배치)
 b1, b2, b3 = st.columns(3)
+
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
@@ -87,14 +91,7 @@ if b3.button("❌ 종료", use_container_width=True):
     st.session_state.positions = []
     play_sound('out')
     st.rerun()
-
-if st.button("🔄 가상머니 초기화", use_container_width=True):
-    st.session_state.balance = 10000.0
-    st.session_state.positions = []
-    st.session_state.logs = []
-    st.rerun()
-
-st.subheader("거래 로그")
+    st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 

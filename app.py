@@ -16,15 +16,19 @@ if 'balance' not in st.session_state:
     st.session_state.msg = None
     st.session_state.msg_type = None
 
-# [수정] CSS로 컨테이너 내부의 경고 메시지 마진만 제거
+# [수정] 메시지 영역 및 내부 경고창의 높이와 마진을 강제로 고정
 st.markdown("""
     <style>
+    .fixed-msg-area {
+        height: 70px;
+        margin: 0px !important;
+        padding: 0px !important;
+        overflow: hidden;
+    }
     div[data-testid="stAlert"] {
         margin-top: 0px !important;
         margin-bottom: 0px !important;
-    }
-    .msg-container-fixed {
-        min-height: 70px;
+        min-height: 50px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -41,16 +45,17 @@ price = get_price()
 
 st.title("BTC 실시간 트레이딩")
 
-# [수정] 컨테이너에 직접 클래스를 부여하여 높이 고정
+# [수정] 경고 메시지 영역 컨테이너 배치
 msg_placeholder = st.container()
-msg_placeholder.markdown('<div class="msg-container-fixed">', unsafe_allow_html=True)
-if st.session_state.msg:
-    if st.session_state.msg_type == "success": msg_placeholder.success(st.session_state.msg)
-    else: msg_placeholder.error(st.session_state.msg)
-    time.sleep(1)
-    st.session_state.msg = None
-    st.rerun()
-msg_placeholder.markdown('</div>', unsafe_allow_html=True)
+with msg_placeholder:
+    st.markdown('<div class="fixed-msg-area">', unsafe_allow_html=True)
+    if st.session_state.msg:
+        if st.session_state.msg_type == "success": st.success(st.session_state.msg)
+        else: st.error(st.session_state.msg)
+        time.sleep(1)
+        st.session_state.msg = None
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # 실전/가상 매매 모드
 col_mode1, col_mode2 = st.columns(2)

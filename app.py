@@ -1,32 +1,36 @@
-from flask import Flask, render_template, request, redirect
+import streamlit as st
 import requests
-import os
 
-app = Flask(__name__)
-user_data = {"balance": 10000.0, "btc_amount": 0.0}
+# 초기 데이터 설정
+if 'balance' not in st.session_state:
+    st.session_state.balance = 10000.0
+    st.session_state.btc = 0.0
 
-def get_okx_price():
+def get_price():
     try:
-        url = "https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT"
-        return float(requests.get(url, timeout=3).json()['data'][0]['last'])
+        r = requests.get("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", timeout=2)
+        return float(r.json()['data'][0]['last'])
     except: return 0.0
 
-@app.route('/')
-def home():
-    return render_template('index.html', price=get_okx_price(), balance=user_data['balance'], btc=user_data['btc_amount'])
+price = get_price()
 
-@app.route('/trade', methods=['POST'])
-def trade():
-    amt = float(request.form.get('amount', 0))
-    action = request.form.get('action')
-    price = get_okx_price()
-    if action == 'buy' and user_data['balance'] >= amt:
-        user_data['btc_amount'] += amt / price
-        user_data['balance'] -= amt
-    elif action == 'sell' and user_data['btc_amount'] > 0:
-        user_data['balance'] += user_data['btc_amount'] * price
-        user_data['btc_amount'] = 0
-    return redirect('/')
+st.title("BTC 실시간 대시보드")
+st.write(f"현재가: {price:,.2f} USDT")
+st.write(f"잔고: {st.session_state.balance:,.2f} USDT | 보유: {st.session_state.btc:.4f} BTC")
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+# 입력 폼
+perc = st.slider("투자 비율 (%)", 1, 100, 10)
+amt = st.number_input("배팅 금액 (USDT)", value=int(st.session_state.balance * perc / 100))
+
+col1, col2 = st.columns(2)
+if col1.button("매수"):
+    if st.session_state.balance >= amt:
+        st.session_state.btc += amt / price
+        st.session_state.balance -= amt
+        st.rerun()
+
+if col2.button("매도"):
+    if st.session_state.btc > 0:
+        st.session_state.balance += st.session_state.btc * price
+        st.session_state.btc = 0
+        st.rerun()

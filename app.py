@@ -4,6 +4,23 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 
+# [추가] 브라우저 소리 재생을 위한 함수
+def play_sound(sound_type):
+    # 진입(in): 880Hz / 종료(out): 440Hz
+    freq = 880 if sound_type == 'in' else 440
+    js_code = f"""
+    <script>
+        var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var oscillator = audioCtx.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime({freq}, audioCtx.currentTime);
+        oscillator.connect(audioCtx.destination);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.2);
+    </script>
+    """
+    components.html(js_code, height=0)
+
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
 if 'init' not in st.session_state:
@@ -52,19 +69,21 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10, key="lev")
 amt = col2.number_input("증거금(USDT)", value=100.0, key="amt")
 
-# [수정] 롱, 숏, 종료 버튼을 한 줄에 가로로 배치
+# 롱, 숏, 종료 버튼 (가로 배치)
 b1, b2, b3 = st.columns(3)
 
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
+        play_sound('in') # 진입 알림
         st.rerun()
 
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
+        play_sound('in') # 진입 알림
         st.rerun()
 
 if b3.button("❌ 종료", use_container_width=True):
@@ -73,6 +92,7 @@ if b3.button("❌ 종료", use_container_width=True):
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료: {pnl:+.2f} USDT")
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
+    play_sound('out') # 종료 알림
     st.rerun()
 
 if st.button("🔄 가상머니 초기화", use_container_width=True):

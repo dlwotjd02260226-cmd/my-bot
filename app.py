@@ -41,13 +41,25 @@ components.html("""
     <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# 자산 계산
+# 데이터 계산
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
 total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
 current_total_asset = st.session_state.balance + total_margin_in_pos + total_pos_pnl
 
+# 누적 수익/손실 계산 (다시 추가함!)
+total_wins = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st.session_state.logs if float(log.split(": ")[-1].replace(" USDT", "")) > 0)
+total_losses = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st.session_state.logs if float(log.split(": ")[-1].replace(" USDT", "")) <= 0)
+
+# UI 출력
 st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{total_pos_pnl:+.2f} USDT")
+
+# [복구] 누적 수익/손실 표시줄
+st.markdown(f"""
+<div style="font-size: 0.9em; margin-bottom: 20px;">
+    누적: <span style="color: green;">익절 {total_wins:,.2f}</span> / <span style="color: red;">손절 {total_losses:,.2f}</span> USDT
+</div>
+""", unsafe_allow_html=True)
 
 # 컨트롤
 col1, col2 = st.columns(2)
@@ -83,7 +95,7 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.logs = []
     st.rerun()
 
-# 로그 및 포지션 표시
+# 보유 포지션 및 거래 로그
 st.subheader("보유 중인 포지션")
 if not st.session_state.positions:
     st.write("보유 포지션 없음")
@@ -95,6 +107,5 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 
-# 실시간 업데이트
 time.sleep(1)
 st.rerun()

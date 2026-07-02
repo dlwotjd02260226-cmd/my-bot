@@ -78,6 +78,8 @@ if b1.button("롱 진입", use_container_width=True):
         })
         st.session_state.balance -= amt
         st.rerun()
+    else:
+        st.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
 
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
@@ -86,12 +88,14 @@ if b2.button("숏 진입", use_container_width=True):
         })
         st.session_state.balance -= amt
         st.rerun()
+    else:
+        st.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
 
 if b3.button("❌ 종료", use_container_width=True):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         
-        # 교차 모드 청산 로직 추가
+        # 교차 모드 청산 로직
         if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0:
             pnl = -p['margin']
             

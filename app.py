@@ -50,16 +50,26 @@ total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-p
 total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
 current_total_asset = st.session_state.balance + total_margin_in_pos + total_pos_pnl
 
+# 누적 수익/손실 계산
+total_wins = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st.session_state.logs if float(log.split(": ")[-1].replace(" USDT", "")) > 0)
+total_losses = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st.session_state.logs if float(log.split(": ")[-1].replace(" USDT", "")) <= 0)
+
 # UI 출력
 st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{total_pos_pnl:+.2f} USDT")
+
+st.markdown(f"""
+<div style="font-size: 0.9em; margin-bottom: 20px;">
+    누적: <span style="color: green;">익절 {total_wins:,.2f}</span> / <span style="color: red;">손절 {total_losses:,.2f}</span> USDT
+</div>
+""", unsafe_allow_html=True)
 
 # 컨트롤
 col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
 amt = col2.number_input("증거금(USDT)", value=100.0)
 
-# 경고창 전용 공간
+# 경고/상태 메시지 전용 공간
 msg_placeholder = st.empty()
 
 # 자동 매매 섹션
@@ -68,6 +78,8 @@ if st.session_state.auto_trading:
     col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)
     if col_auto2.button("🔴 자동 매매 종료", use_container_width=True):
         st.session_state.auto_trading = False
+        msg_placeholder.error("🔴 자동 매매가 종료되었습니다.")
+        time.sleep(1)
         for p in st.session_state.positions:
             pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
             if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0:
@@ -79,10 +91,11 @@ if st.session_state.auto_trading:
 else:
     if col_auto1.button("🟢 자동 매매 시작", use_container_width=True):
         st.session_state.auto_trading = True
+        msg_placeholder.success("🟢 자동 매매가 시작되었습니다.")
+        time.sleep(1)
         st.rerun()
     col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
 
-# [추가] 섹션 분리선
 st.divider()
 
 # 매매 버튼 (롱/숏/정리)
@@ -146,3 +159,4 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
+

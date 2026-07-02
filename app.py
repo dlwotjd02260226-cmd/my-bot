@@ -26,59 +26,51 @@ components.html("""
 <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# 2. 실시간 데이터 갱신 루프
-# placeholder를 사용하여 깜빡임 없이 숫자만 갱신
-placeholder = st.empty()
+# 2. 버튼 구역 (루프 밖으로 배치하여 오류 원천 차단)
+price = get_price()
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("롱 진입", key="btn_long"):
+        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': 100.0, 'lev': 10})
+        st.rerun()
+with col2:
+    if st.button("숏 진입", key="btn_short"):
+        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': 100.0, 'lev': 10})
+        st.rerun()
 
-# 컨트롤 버튼 (오류 방지를 위해 고유 key 필수 부여)
-lev = st.slider("레버리지", 1, 125, 10, key="slider_lev")
-amt = st.number_input("증거금(USDT)", value=100.0, key="input_amt")
-
-c1, c2, c3 = st.columns(3)
-if c1.button("롱 진입", key="btn_long"):
-    st.session_state.positions.append({'type': '롱', 'entry': get_price(), 'margin': amt, 'lev': lev})
-    st.rerun()
-if c2.button("숏 진입", key="btn_short"):
-    st.session_state.positions.append({'type': '숏', 'entry': get_price(), 'margin': amt, 'lev': lev})
-    st.rerun()
-if c3.button("포지션 전체 종료", key="btn_close_all"):
-    # 아래 루프에서 계산된 값을 정산
-    st.rerun()
-
-# 3. 실시간 업데이트 루프 (에러 방지를 위해 이 안에는 버튼을 최소화)
-while True:
-    price = get_price()
+# 포지션 종료 버튼 하나로 통합
+if st.button("❌ 포지션 전체 종료 및 정산", key="btn_close_all"):
     total_pos_pnl = 0
     for p in st.session_state.positions:
         diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
         total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
-    
-    # [핵심] 시작금 10,000 + 누적 수익 + 실시간 평가 수익
-    current_asset = 10000.0 + st.session_state.total_realized_pnl + total_pos_pnl
-    
-    with placeholder.container():
-        st.metric("실시간 총 자산 (USDT)", f"{current_asset:,.2f}", f"{st.session_state.total_realized_pnl + total_pos_pnl:+.2f} USDT")
-        st.write(f"현재가: {price:,.2f} USDT")
-        
-        for p in st.session_state.positions:
-            pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-            st.info(f"[{p['type']}] 수익: {pnl:+.2f} USDT")
+    st.session_state.total_realized_pnl += total_pos_pnl
+    st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 정산: {total_pos_pnl:+.2f} USDT")
+    st.session_state.positions = []
+    st.rerun()
 
-    # 정산 버튼과 초기화 버튼은 루프 밖에서 동작하도록 분리 또는 고유 키 부여
-    if st.button("🔄 포지션 정산하기", key="btn_settle"):
-        st.session_state.total_realized_pnl += total_pos_pnl
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 정산: {total_pos_pnl:+.2f} USDT")
-        st.session_state.positions = []
-        st.rerun()
-    
-    if st.button("🔄 가상머니 초기화", key="btn_reset_all"):
-        st.session_state.total_realized_pnl = 0.0
-        st.session_state.positions = []
-        st.session_state.logs = []
-        st.rerun()
+# 3. 실시간 데이터 표시
+total_pos_pnl = 0
+for p in st.session_state.positions:
+    diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
+    total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
 
-    st.caption("최근 거래 로그")
-    for log in reversed(st.session_state.logs[-5:]):
-        st.text(log)
-    
-    time.sleep(0.3)
+# 시작금 10,000 + 누적 수익 + 현재 평가 수익
+current_asset = 10000.0 + st.session_state.total_realized_pnl + total_pos_pnl
+
+st.metric("실시간 총 자산 (USDT)", f"{current_asset:,.2f}", f"{st.session_state.total_realized_pnl + total_pos_pnl:+.2f} USDT")
+
+for p in st.session_state.positions:
+    pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
+    st.info(f"[{p['type']}] 수익: {pnl:+.2f} USDT")
+
+# 4. 초기화
+if st.button("🔄 가상머니 초기화", key="btn_reset"):
+    st.session_state.total_realized_pnl = 0.0
+    st.session_state.positions = []
+    st.session_state.logs = []
+    st.rerun()
+
+st.caption("최근 거래 로그")
+for log in reversed(st.session_state.logs[-5:]):
+    st.text(log)

@@ -25,14 +25,13 @@ price = get_price()
 
 st.title("BTC 실시간 트레이딩")
 
-# [수정] 실전/가상 모드와 교차/격리 모드를 안정적인 라디오 버튼으로 통합
+# 실전/가상 모드와 교차/격리 모드 라디오 버튼
 col_mode1, col_mode2 = st.columns(2)
 with col_mode1:
     mode_real = st.radio("매매 모드", ["가상 매매", "실전 매매"], key="is_real", horizontal=True)
 with col_mode2:
     mode_margin = st.radio("증거금 모드", ["격리 (Isolated)", "교차 (Cross)"], key="margin_mode", horizontal=True)
 
-# 상태 메시지 출력
 if mode_real == "실전 매매":
     st.error(f"🚨 실전 매매 모드 ({mode_margin}) 입니다.")
 else:
@@ -91,7 +90,12 @@ if b2.button("숏 진입", use_container_width=True):
 if b3.button("❌ 종료", use_container_width=True):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료: {pnl:+.2f} USDT")
+        
+        # 교차 모드 청산 로직 추가
+        if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0:
+            pnl = -p['margin']
+            
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료({p['mode']}): {pnl:+.2f} USDT")
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
     st.rerun()

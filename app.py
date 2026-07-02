@@ -6,7 +6,6 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
-# --- 데이터 상태 관리 ---
 if 'init' not in st.session_state:
     st.session_state.balance = 10000.0
     st.session_state.positions = []
@@ -22,19 +21,20 @@ def get_price():
 price = get_price()
 st.title("BTC 실시간 트레이딩")
 
-# 차트
 components.html("""<div id="tv"></div><script src="https://s3.tradingview.com/tv.js"></script><script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>""", height=260)
 
-# 1. 포지션별 평가 손익 합계 계산
+# 1. 포지션별 평가 손익
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
 
-# 2. 실시간 총 자산 계산: (현재 잔액 + 평가 손익)
-current_total_asset = st.session_state.balance + total_pos_pnl
+# 2. 핵심 로직: 
+# 실시간 총 자산 = (잔액 + 현재 진입한 증거금 합계) + 평가 손익
+total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
+current_total_asset = st.session_state.balance + total_margin_in_pos + total_pos_pnl
 
-# 3. 실시간 변동 금액 계산: (오직 평가 손익만)
+# 3. 변동 금액 = 오직 평가 손익만
 current_fluctuation = total_pos_pnl
 
-# --- UI 출력 ---
+# UI 출력
 st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{current_fluctuation:+.2f} USDT")
 
@@ -59,6 +59,7 @@ if st.button("❌ 포지션 종료"):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료: {pnl:+.2f} USDT")
+        # 종료 시 증거금을 다시 잔액으로 돌려주고 수익금을 합산
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
     st.rerun()

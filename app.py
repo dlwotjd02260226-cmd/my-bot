@@ -1,79 +1,59 @@
 import streamlit as st
 import requests
 import streamlit.components.v1 as components
+import time
 
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
 # 세션 초기화
 if 'balance' not in st.session_state: st.session_state.balance = 10000.0
 if 'positions' not in st.session_state: st.session_state.positions = [] 
-if 'logs' not in st.session_state: st.session_state.logs = []
 
 def get_price():
     try:
-        r = requests.get("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", timeout=2)
+        # 응답속도 최적화를 위해 최소한의 데이터만 요청
+        r = requests.get("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", timeout=0.5)
         return float(r.json()['data'][0]['last'])
     except: return 0.0
 
-price = get_price()
+st.title("BTC 실시간 트레이딩")
 
-# 자산 계산
-total_pos_val = sum([p['amt'] * (price if p['type'] == '롱' else (2*p['entry'] - price)) for p in st.session_state.positions])
-total_asset = st.session_state.balance + total_pos_val
-pnl_amt = total_asset - 10000
-pnl_pct = (pnl_amt / 10000) * 100
+# UI 자리 배치
+placeholder = st.empty()
 
-st.metric("실시간 자산 (USDT)", f"{total_asset:,.2f}", f"{pnl_pct:+.2f}% ({pnl_amt:+.2f} USDT)")
-
-# 청산가 계산
-if st.session_state.positions:
-    liq = min([p['entry'] * (1 - (0.8 / 20)) if p['type'] == '롱' else p['entry'] * (1 + (0.8 / 20)) for p in st.session_state.positions])
-    st.error(f"⚠️ 예상 청산가: {liq:,.2f} USDT")
-
-# 컨트롤
-lev = st.slider("레버리지", 1, 125, 1)
-amt = st.number_input("금액 (USDT)", min_value=1, value=1000)
-
-c1, c2, c3 = st.columns(3)
-if c1.button("롱 진입"):
-    if st.session_state.balance >= amt:
-        st.session_state.positions.append({'type': '롱', 'entry': price, 'amt': (amt*lev)/price})
-        st.session_state.balance -= amt
-        st.session_state.logs.append(f"롱({lev}배) @ {price:,.0f}")
-        st.rerun()
-if c2.button("숏 진입"):
-    if st.session_state.balance >= amt:
-        st.session_state.positions.append({'type': '숏', 'entry': price, 'amt': (amt*lev)/price})
-        st.session_state.balance -= amt
-        st.session_state.logs.append(f"숏({lev}배) @ {price:,.0f}")
-        st.rerun()
-if c3.button("포지션 종료"):
-    for p in st.session_state.positions:
-        profit = (p['amt'] * price) if p['type'] == '롱' else (p['amt'] * (2*p['entry'] - price))
-        st.session_state.balance += profit
-    st.session_state.positions = []
-    st.session_state.logs.append(f"종료 @ {price:,.0f}")
-    st.rerun()
-
-# 차트 (오류 방지를 위해 따옴표 3개 사용)
+# 차트 위젯 (웹에서 자체 구동되므로 차트는 실시간)
 components.html("""
-<div id="tv"></div>
-<script src="https://s3.tradingview.com/tv.js"></script>
-<script>
-new TradingView.widget({
-  "width": "100%", "height": 250, "symbol": "OKX:BTCUSDT",
-  "theme": "light", "container_id": "tv"
-});
-</script>
+<div id="tv"></div><script src="https://s3.tradingview.com/tv.js"></script>
+<script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# 초기화 및 로그
-if st.button("🔄 자산 초기화"):
-    st.session_state.balance = 10000.0
+# 컨트롤 버튼 (버튼만 여기에 배치)
+lev = st.slider("레버리지", 1, 125, 10)
+amt = st.number_input("증거금(USDT)", value=100)
+c1, c2, c3 = st.columns(3)
+
+if c1.button("롱 진입"):
+    st.session_state.positions.append({'type': '롱', 'entry': get_price(), 'margin': amt, 'lev': lev})
+    st.session_state.balance -= amt
+if c2.button("숏 진입"):
+    st.session_state.positions.append({'type': '숏', 'entry': get_price(), 'margin': amt, 'lev': lev})
+    st.session_state.balance -= amt
+if c3.button("포지션 종료"):
     st.session_state.positions = []
-    st.session_state.logs = ["초기화 완료"]
     st.rerun()
 
-st.caption("최근 기록")
-for log in reversed(st.session_state.logs[-3:]):
-    st.text(log)
+# 0.3초 간격 업데이트 (서버 안정성과 반응속도의 균형점)
+while True:
+    price = get_price()
+    total_pos_pnl = 0
+    for p in st.session_state.positions:
+        diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
+        total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
+    
+    total_asset = st.session_state.balance + total_pos_pnl
+    
+    with placeholder.container():
+        st.metric("실시간 자산 (USDT)", f"{total_asset:,.2f}", f"{total_pos_pnl:+.2f} USDT")
+        st.write(f"현재가: {price:,.2f} USDT")
+    
+    time.sleep(0.3) 

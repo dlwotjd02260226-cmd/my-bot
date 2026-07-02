@@ -5,7 +5,7 @@ from datetime import datetime
 
 # 세션 상태 초기화
 if 'balance' not in st.session_state: st.session_state.balance = 10000.0
-if 'positions' not in st.session_state: st.session_state.positions = [] # [타입, 진입가, 수량]
+if 'positions' not in st.session_state: st.session_state.positions = [] 
 if 'logs' not in st.session_state: st.session_state.logs = []
 
 def get_price():
@@ -17,12 +17,11 @@ def get_price():
 price = get_price()
 st.title("BTC 실시간 트레이딩 대시보드")
 
-# 1. 자산 실시간 계산 (수익금 표시)
+# 1. 자산 실시간 계산
 total_pos_val = sum([p['amt'] * (price if p['type'] == '롱' else (2*p['entry'] - price)) for p in st.session_state.positions])
 st.metric("현재가", f"{price:,.2f} USDT")
 st.metric("실시간 자산", f"{st.session_state.balance + total_pos_val:,.2f} USDT")
 
-# 2. OKX 레버리지 정보 (비트코인 맥스 125배)
 st.info("💡 OKX BTC-USDT 최대 레버리지: 125배")
 
 # 차트
@@ -39,4 +38,21 @@ if col1.button("롱 진입"):
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 롱 진입 @ {price:,.2f}")
         st.rerun()
 
-if col2
+if col2.button("숏 진입"):
+    if st.session_state.balance >= amt:
+        st.session_state.positions.append({'type': '숏', 'entry': price, 'amt': amt/price})
+        st.session_state.balance -= amt
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 숏 진입 @ {price:,.2f}")
+        st.rerun()
+
+if col3.button("포지션 종료"):
+    for p in st.session_state.positions:
+        st.session_state.balance += (p['amt'] * price * 2) if p['type'] == '숏' else (p['amt'] * price)
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 포지션 종료 @ {price:,.2f}")
+    st.session_state.positions = []
+    st.rerun()
+
+# 로그 출력
+st.subheader("매매 로그")
+for log in reversed(st.session_state.logs[-5:]):
+    st.write(log)

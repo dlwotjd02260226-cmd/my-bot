@@ -62,13 +62,12 @@ amt = col2.number_input("증거금(USDT)", value=100.0)
 # 경고창 전용 공간
 msg_placeholder = st.empty()
 
-# [수정] 자동 매매 버튼을 롱/숏 버튼 최상단에 배치
+# 자동 매매 섹션
 col_auto1, col_auto2 = st.columns(2)
 if st.session_state.auto_trading:
     col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)
     if col_auto2.button("🔴 자동 매매 종료", use_container_width=True):
         st.session_state.auto_trading = False
-        # 포지션 일괄 정리 로직
         for p in st.session_state.positions:
             pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
             if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0:
@@ -82,6 +81,9 @@ else:
         st.session_state.auto_trading = True
         st.rerun()
     col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
+
+# [추가] 섹션 분리선
+st.divider()
 
 # 매매 버튼 (롱/숏/정리)
 b1, b2, b3 = st.columns(3)
@@ -144,4 +146,3 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
-

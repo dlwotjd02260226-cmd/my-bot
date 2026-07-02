@@ -13,8 +13,8 @@ if 'balance' not in st.session_state:
     st.session_state.positions = []
     st.session_state.logs = []
     st.session_state.auto_trading = False
-    st.session_state.msg = None
-    st.session_state.msg_type = None
+    st.session_state.msg = None  # 메시지 내용
+    st.session_state.msg_type = None  # 메시지 타입
 
 # 시세 가져오기 함수
 def get_price():
@@ -40,19 +40,23 @@ if mode_real == "실전 매매":
 else:
     st.success(f"✅ 가상 매매 모드 ({mode_margin}) 입니다.")
 
+# 트레이딩뷰 위젯
 components.html("""
     <div id="tv"></div>
     <script src="https://s3.tradingview.com/tv.js"></script>
     <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
+# 데이터 계산
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
 total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
 current_total_asset = st.session_state.balance + total_margin_in_pos + total_pos_pnl
 
+# 누적 수익/손실 계산
 total_wins = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st.session_state.logs if float(log.split(": ")[-1].replace(" USDT", "")) > 0)
 total_losses = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st.session_state.logs if float(log.split(": ")[-1].replace(" USDT", "")) <= 0)
 
+# UI 출력
 st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{total_pos_pnl:+.2f} USDT")
 
@@ -62,26 +66,23 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# 컨트롤
 col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
 amt = col2.number_input("증거금(USDT)", value=100.0)
 
-# [수정] 경고 메시지 영역: 항상 고정 높이 유지
-msg_container = st.container()
-
+# [수정] 경고 메시지 고정 영역 (높이 80px로 강제 고정하여 떨림 방지)
+st.markdown("""
+    <div style="height: 80px;">
+""", unsafe_allow_html=True)
+msg_area = st.container()
 if st.session_state.msg:
-    with msg_container:
-        if st.session_state.msg_type == "success": 
-            st.success(st.session_state.msg)
-        else: 
-            st.error(st.session_state.msg)
+    if st.session_state.msg_type == "success": msg_area.success(st.session_state.msg)
+    else: msg_area.error(st.session_state.msg)
     time.sleep(1)
-    st.session_state.msg = None # 1초 후 내용 비우기
+    st.session_state.msg = None
     st.rerun()
-else:
-    # 메시지가 없을 때는 빈 컨테이너만 유지하여 공간을 차지하게 함
-    with msg_container:
-        st.markdown('<div style="height: 68px;"></div>', unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # 자동 매매 섹션
 col_auto1, col_auto2 = st.columns(2)
@@ -145,6 +146,7 @@ if b3.button("❌ 종료", use_container_width=True):
     st.session_state.msg_type = "error"
     st.rerun()
 
+# 가상머니 초기화
 if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.balance = 10000.0
     st.session_state.positions = []
@@ -152,6 +154,7 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.auto_trading = False
     st.rerun()
 
+# 포지션/로그 표시
 st.subheader("보유 중인 포지션")
 if not st.session_state.positions:
     st.write("보유 포지션 없음")

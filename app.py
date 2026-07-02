@@ -52,18 +52,17 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10, key="lev")
 amt = col2.number_input("증거금(USDT)", value=100.0, key="amt")
 
-# [수정] 롱, 숏, 종료 버튼을 한 줄에 가로로 배치
 b1, b2, b3 = st.columns(3)
 
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
+        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
         st.rerun()
 
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
+        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
         st.rerun()
 
@@ -80,6 +79,14 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.positions = []
     st.session_state.logs = []
     st.rerun()
+
+# [수정] 보유 포지션 및 거래 로그 표시
+st.subheader("보유 중인 포지션")
+if not st.session_state.positions:
+    st.write("보유 포지션 없음")
+else:
+    for p in st.session_state.positions:
+        st.info(f"{p['time']} | {p['type']} | 진입가: {p['entry']} | 증거금: {p['margin']} | 레버리지: {p['lev']}x")
 
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):

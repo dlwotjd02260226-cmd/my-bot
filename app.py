@@ -26,51 +26,49 @@ components.html("""
 <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# 2. 버튼 구역 (루프 밖으로 배치하여 오류 원천 차단)
+# 2. 가격 및 수익 계산
 price = get_price()
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("롱 진입", key="btn_long"):
-        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': 100.0, 'lev': 10})
-        st.rerun()
-with col2:
-    if st.button("숏 진입", key="btn_short"):
-        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': 100.0, 'lev': 10})
-        st.rerun()
-
-# 포지션 종료 버튼 하나로 통합
-if st.button("❌ 포지션 전체 종료 및 정산", key="btn_close_all"):
-    total_pos_pnl = 0
-    for p in st.session_state.positions:
-        diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
-        total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
-    st.session_state.total_realized_pnl += total_pos_pnl
-    st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 정산: {total_pos_pnl:+.2f} USDT")
-    st.session_state.positions = []
-    st.rerun()
-
-# 3. 실시간 데이터 표시
 total_pos_pnl = 0
 for p in st.session_state.positions:
     diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
     total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
 
-# 시작금 10,000 + 누적 수익 + 현재 평가 수익
+# 3. 자산 표시 (시작금 10,000 + 누적 수익 + 실시간 평가 수익)
 current_asset = 10000.0 + st.session_state.total_realized_pnl + total_pos_pnl
-
 st.metric("실시간 총 자산 (USDT)", f"{current_asset:,.2f}", f"{st.session_state.total_realized_pnl + total_pos_pnl:+.2f} USDT")
+st.write(f"현재가: {price:,.2f} USDT")
 
+# 4. 컨트롤 버튼 (루프 밖으로 분리하여 오류 방지)
+lev = st.slider("레버리지", 1, 125, 10, key="slider_lev")
+amt = st.number_input("증거금(USDT)", value=100.0, key="input_amt")
+
+c1, c2 = st.columns(2)
+if c1.button("롱 진입", key="btn_long"):
+    st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
+    st.rerun()
+if c2.button("숏 진입", key="btn_short"):
+    st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
+    st.rerun()
+
+# 포지션 정보
 for p in st.session_state.positions:
     pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
     st.info(f"[{p['type']}] 수익: {pnl:+.2f} USDT")
 
-# 4. 초기화
-if st.button("🔄 가상머니 초기화", key="btn_reset"):
+# 5. 정산 및 초기화 (통합)
+if st.button("❌ 포지션 종료 및 정산하기", key="btn_settle"):
+    st.session_state.total_realized_pnl += total_pos_pnl
+    st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 정산: {total_pos_pnl:+.2f} USDT")
+    st.session_state.positions = []
+    st.rerun()
+    
+if st.button("🔄 가상머니 초기화", key="btn_reset_all"):
     st.session_state.total_realized_pnl = 0.0
     st.session_state.positions = []
     st.session_state.logs = []
     st.rerun()
 
+# 6. 로그
 st.caption("최근 거래 로그")
 for log in reversed(st.session_state.logs[-5:]):
     st.text(log)

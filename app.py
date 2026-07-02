@@ -69,7 +69,7 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
 amt = col2.number_input("증거금(USDT)", value=100.0)
 
-# 경고/상태 메시지 전용 공간
+# 고정된 경고/상태 메시지 전용 공간 (이 칸은 항상 존재하여 UI 흔들림 방지)
 msg_placeholder = st.empty()
 
 # 자동 매매 섹션
@@ -80,6 +80,7 @@ if st.session_state.auto_trading:
         st.session_state.auto_trading = False
         msg_placeholder.error("🔴 자동 매매가 종료되었습니다.")
         time.sleep(1)
+        # 포지션 일괄 정리 로직
         for p in st.session_state.positions:
             pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
             if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0:
@@ -98,12 +99,14 @@ else:
 
 st.divider()
 
-# 매매 버튼 (롱/숏/정리)
+# 매매 버튼
 b1, b2, b3 = st.columns(3)
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
+        msg_placeholder.success("🟢 롱 포지션 진입 완료!")
+        time.sleep(1)
         st.rerun()
     else:
         msg_placeholder.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
@@ -113,6 +116,8 @@ if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
+        msg_placeholder.error("🔴 숏 포지션 진입 완료!")
+        time.sleep(1)
         st.rerun()
     else:
         msg_placeholder.error(f"❌ 잔고 부족! (현재 잔고: {st.session_state.balance:,.2f} USDT)")
@@ -159,4 +164,3 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
-

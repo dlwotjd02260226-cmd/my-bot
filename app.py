@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import streamlit.components.v1 as components
-from datetime import datetime
 
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
@@ -26,7 +25,7 @@ pnl_pct = (pnl_amt / 10000) * 100
 
 st.metric("실시간 자산 (USDT)", f"{total_asset:,.2f}", f"{pnl_pct:+.2f}% ({pnl_amt:+.2f} USDT)")
 
-# 청산가 표시
+# 청산가 계산
 if st.session_state.positions:
     liq = min([p['entry'] * (1 - (0.8 / 20)) if p['type'] == '롱' else p['entry'] * (1 + (0.8 / 20)) for p in st.session_state.positions])
     st.error(f"⚠️ 예상 청산가: {liq:,.2f} USDT")
@@ -56,5 +55,25 @@ if c3.button("포지션 종료"):
     st.session_state.logs.append(f"종료 @ {price:,.0f}")
     st.rerun()
 
-# 차트
-components.html('<div id="tv"></div><script src="https://s3.tradingview.com/tv.js"></script><script>new TradingView.widget({"width":"100%","height":
+# 차트 (오류 방지를 위해 따옴표 3개 사용)
+components.html("""
+<div id="tv"></div>
+<script src="https://s3.tradingview.com/tv.js"></script>
+<script>
+new TradingView.widget({
+  "width": "100%", "height": 250, "symbol": "OKX:BTCUSDT",
+  "theme": "light", "container_id": "tv"
+});
+</script>
+""", height=260)
+
+# 초기화 및 로그
+if st.button("🔄 자산 초기화"):
+    st.session_state.balance = 10000.0
+    st.session_state.positions = []
+    st.session_state.logs = ["초기화 완료"]
+    st.rerun()
+
+st.caption("최근 기록")
+for log in reversed(st.session_state.logs[-3:]):
+    st.text(log)

@@ -12,7 +12,6 @@ if 'balance' not in st.session_state:
     st.session_state.balance = 10000.0
     st.session_state.positions = []
     st.session_state.logs = []
-    st.session_state.is_real_mode = False
 
 # 시세 가져오기 함수
 def get_price():
@@ -26,16 +25,18 @@ price = get_price()
 
 st.title("BTC 실시간 트레이딩")
 
-# 실전/가상 모드 토글
-st.session_state.is_real_mode = st.toggle("실전 매매 모드 활성화", st.session_state.is_real_mode)
+# [수정] 실전/가상 모드와 교차/격리 모드를 안정적인 라디오 버튼으로 통합
+col_mode1, col_mode2 = st.columns(2)
+with col_mode1:
+    mode_real = st.radio("매매 모드", ["가상 매매", "실전 매매"], key="is_real", horizontal=True)
+with col_mode2:
+    mode_margin = st.radio("증거금 모드", ["격리 (Isolated)", "교차 (Cross)"], key="margin_mode", horizontal=True)
 
-# [딱 하나 추가] 교차/격리 모드 선택 버튼
-margin_mode = st.radio("증거금 모드", ["격리 (Isolated)", "교차 (Cross)"], horizontal=True, key="margin_mode")
-
-if st.session_state.is_real_mode:
-    st.error(f"🚨 실전 매매 모드 ({margin_mode}) 입니다.")
+# 상태 메시지 출력
+if mode_real == "실전 매매":
+    st.error(f"🚨 실전 매매 모드 ({mode_margin}) 입니다.")
 else:
-    st.success(f"✅ 가상 매매 모드 ({margin_mode}) 입니다.")
+    st.success(f"✅ 가상 매매 모드 ({mode_margin}) 입니다.")
 
 # 트레이딩뷰 위젯
 components.html("""
@@ -44,7 +45,7 @@ components.html("""
     <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# 자산 계산
+# 데이터 계산
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
 total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
 current_total_asset = st.session_state.balance + total_margin_in_pos + total_pos_pnl
@@ -73,13 +74,17 @@ b1, b2, b3 = st.columns(3)
 
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': margin_mode, 'time': datetime.now().strftime('%H:%M:%S')})
+        st.session_state.positions.append({
+            'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')
+        })
         st.session_state.balance -= amt
         st.rerun()
 
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': margin_mode, 'time': datetime.now().strftime('%H:%M:%S')})
+        st.session_state.positions.append({
+            'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')
+        })
         st.session_state.balance -= amt
         st.rerun()
 
@@ -109,6 +114,6 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 
-# 실시간 업데이트
+# 실시간 업데이트 (0.3초)
 time.sleep(0.3)
 st.rerun()

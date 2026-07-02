@@ -9,7 +9,7 @@ st.set_page_config(page_title="BTC Bot", layout="centered")
 # --- 데이터 상태 관리 ---
 if 'balance' not in st.session_state: st.session_state.balance = 10000.0
 if 'positions' not in st.session_state: st.session_state.positions = [] 
-if 'logs' not in st.session_state: st.session_state.logs = [] # 로그 저장소 추가
+if 'logs' not in st.session_state: st.session_state.logs = []
 
 def get_price():
     try:
@@ -29,10 +29,12 @@ for p in st.session_state.positions:
     diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
     total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
 
-# [핵심] UI 배치 (위: 총자산, 아래: 변동금)
-fluctuation = total_pos_pnl 
-st.metric("실시간 총 자산 (USDT)", f"{10000.0 + fluctuation:,.2f}")
-st.metric("현재 변동 금액 (USDT)", f"{fluctuation:+.2f} USDT")
+# [핵심] 가용 잔액(Balance) + 평가 손익으로 계산
+# balance에는 종료된 포지션의 수익이 계속 누적됩니다.
+current_asset = st.session_state.balance + total_pos_pnl
+
+st.metric("실시간 총 자산 (USDT)", f"{current_asset:,.2f}")
+st.metric("현재 변동 금액 (USDT)", f"{current_asset - 10000.0:+.2f} USDT")
 st.write(f"현재가: {price:,.2f} USDT")
 
 # 컨트롤
@@ -53,16 +55,23 @@ if c2.button("숏 진입", key="btn_short"):
         st.session_state.balance -= amt
         st.rerun()
 
-# 포지션 종료 및 로그 기록
-if st.button("❌ 포지션 종료 및 정산하기", key="btn_settle"):
+# 1. 포지션 종료 (수익 합산 후 포지션만 비움)
+if st.button("❌ 포지션 종료", key="btn_close"):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-        # 로그 상세 기록: 진입가, 종료가, 수익/손실
-        log_entry = f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 진입@{p['entry']:.1f} → 종료@{price:.1f} | 결과: {pnl:+.2f} USDT"
+        log_entry = f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료 | 결과: {pnl:+.2f} USDT"
         st.session_state.logs.append(log_entry)
+        # 잔액에 증거금 + 수익 합산
+        st.session_state.balance += (p['margin'] + pnl)
         
-    st.session_state.balance += (sum(p['margin'] for p in st.session_state.positions) + total_pos_pnl)
     st.session_state.positions = []
+    st.rerun()
+
+# 2. 가상머니 초기화 (잔액과 로그를 완전히 리셋)
+if st.button("🔄 가상머니 초기화", key="btn_reset"):
+    st.session_state.balance = 10000.0
+    st.session_state.positions = []
+    st.session_state.logs = []
     st.rerun()
 
 # 로그 출력

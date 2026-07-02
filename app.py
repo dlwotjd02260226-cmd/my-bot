@@ -9,8 +9,6 @@ st.set_page_config(page_title="BTC Bot", layout="centered")
 # --- 데이터 상태 관리 ---
 if 'balance' not in st.session_state: st.session_state.balance = 10000.0
 if 'positions' not in st.session_state: st.session_state.positions = [] 
-if 'logs' not in st.session_state: st.session_state.logs = []
-if 'total_realized_pnl' not in st.session_state: st.session_state.total_realized_pnl = 0.0
 
 def get_price():
     try:
@@ -31,12 +29,17 @@ for p in st.session_state.positions:
     diff = (price - p['entry']) if p['type'] == '롱' else (p['entry'] - price)
     total_pos_pnl += (diff / p['entry']) * p['margin'] * p['lev']
 
-# [핵심] 시작금 10,000 기준 자산 변동 로직
-# 가용 잔액(10,000에서 시작) + 실시간 평가 손익
-current_asset = 10000.0 + (st.session_state.balance - 10000.0) + total_pos_pnl
+# [핵심] 계산 방식 교정
+# 1. 변동 금액: 현재 열려있는 포지션들의 순수익/손실 합계
+fluctuation = total_pos_pnl 
 
-# 실시간 총 자산 표시 (시작금 10,000 기준 증감)
-st.metric("실시간 총 자산 (USDT)", f"{current_asset:,.2f}", f"{current_asset - 10000.0:+.2f} USDT")
+# 2. 실시간 총 자산: 시작금(10,000) + 변동 금액
+total_asset = 10000.0 + fluctuation
+
+# UI 표시 (위치를 완전히 교체)
+st.metric("실시간 총 자산 (USDT)", f"{total_asset:,.2f}")
+st.metric("현재 변동 금액 (USDT)", f"{fluctuation:+.2f} USDT")
+
 st.write(f"현재가: {price:,.2f} USDT")
 
 # 컨트롤
@@ -51,26 +54,15 @@ if c1.button("롱 진입", key="btn_long"):
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
         st.rerun()
-    else: st.error("증거금 부족!")
 
 if c2.button("숏 진입", key="btn_short"):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev})
         st.session_state.balance -= amt
         st.rerun()
-    else: st.error("증거금 부족!")
-
-for p in st.session_state.positions:
-    pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-    st.warning(f"[{p['type']}] 수익: {pnl:+.2f} USDT")
 
 if st.button("❌ 포지션 종료 및 정산하기", key="btn_settle"):
     st.session_state.balance += (sum(p['margin'] for p in st.session_state.positions) + total_pos_pnl)
-    st.session_state.positions = []
-    st.rerun()
-
-if st.button("🔄 가상머니 초기화", key="btn_reset"):
-    st.session_state.balance = 10000.0
     st.session_state.positions = []
     st.rerun()
 

@@ -184,5 +184,12 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 
+# [추가] 경제 캘린더 영역
+st.subheader("실시간 경제 지표 발표")
+components.html("""
+<iframe src="https://sslecal2.investing.com?columns=exc_flags,exc_currency,exc_importance,exc_actual,exc_forecast,exc_previous&importance=2,3&features=datepicker,timeselector,filters&countries=5,25,32,37,72&calType=day&timeZone=8&lang=1" width="100%" height="400" frameborder="0" allowtransparency="true" marginwidth="0" marginheight="0"></iframe>
+""", height=420)
+
 time.sleep(0.3)
 st.rerun()
+

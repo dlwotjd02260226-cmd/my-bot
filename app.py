@@ -84,7 +84,7 @@ col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
 amt = col2.number_input("증거금(USDT)", value=100.0)
 
-# [수정] st.success/error 대신 HTML 직접 렌더링으로 고정
+# 메시지 출력 영역
 msg_placeholder = st.empty()
 if st.session_state.msg:
     c_class = "msg-success" if st.session_state.msg_type == "success" else "msg-error"
@@ -117,6 +117,23 @@ else:
         st.session_state.msg_type = "success"
         st.rerun()
     col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
+
+# [이동] 보유 중인 포지션 섹션을 위로 이동
+st.subheader("보유 중인 포지션")
+if not st.session_state.positions:
+    st.write("보유 포지션 없음")
+else:
+    for p in st.session_state.positions:
+        liq_price = p['entry'] * (1 - (1 / p['lev'])) if p['type'] == '롱' else p['entry'] * (1 + (1 / p['lev']))
+        st.markdown(f"""
+        <div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; margin-bottom: 5px;">
+        <div style="font-weight: bold;">{p['time']} | {p['type']} ({p['mode']}) | {p['lev']}x</div>
+        <div style="display: flex; justify-content: space-between;">
+        <span>진입가: <b style="color: blue;">{p['entry']:.2f}</b></span>
+        <span>청산가: <b style="color: red;">{liq_price:.2f}</b></span>
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 st.divider()
 
@@ -164,32 +181,9 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.auto_trading = False
     st.rerun()
 
-st.subheader("보유 중인 포지션")
-if not st.session_state.positions:
-    st.write("보유 포지션 없음")
-else:
-    for p in st.session_state.positions:
-        liq_price = p['entry'] * (1 - (1 / p['lev'])) if p['type'] == '롱' else p['entry'] * (1 + (1 / p['lev']))
-        st.markdown(f"""
-        <div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; margin-bottom: 5px;">
-        <div style="font-weight: bold;">{p['time']} | {p['type']} ({p['mode']}) | {p['lev']}x</div>
-        <div style="display: flex; justify-content: space-between;">
-        <span>진입가: <b style="color: blue;">{p['entry']:.2f}</b></span>
-        <span>청산가: <b style="color: red;">{liq_price:.2f}</b></span>
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
-
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 
-# [추가] 경제 캘린더 영역
-st.subheader("실시간 경제 지표 발표")
-components.html("""
-<iframe src="https://sslecal2.investing.com?columns=exc_flags,exc_currency,exc_importance,exc_actual,exc_forecast,exc_previous&importance=2,3&features=datepicker,timeselector,filters&countries=5,25,32,37,72&calType=day&timeZone=8&lang=1" width="100%" height="400" frameborder="0" allowtransparency="true" marginwidth="0" marginheight="0"></iframe>
-""", height=420)
-
 time.sleep(0.3)
 st.rerun()
-

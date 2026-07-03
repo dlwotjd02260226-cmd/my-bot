@@ -118,7 +118,7 @@ else:
         st.rerun()
     col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
 
-# [이동] 보유 중인 포지션 섹션을 위로 이동
+# 보유 중인 포지션
 st.subheader("보유 중인 포지션")
 if not st.session_state.positions:
     st.write("보유 포지션 없음")
@@ -134,6 +134,22 @@ else:
         </div>
         </div>
         """, unsafe_allow_html=True)
+
+# [추가] 매매 판단 엔진 상태 패널
+st.subheader("매매 판단 엔진 상태")
+status_col1, status_col2 = st.columns(2)
+status_col1.info("📊 현재 전략: 대기중")
+status_col2.warning("⚪ 신호: 신호 없음")
+
+with st.expander("🔍 매매 이유 상세 보기 (펼치기)"):
+    st.markdown("""
+    * **1. 지지/저항 돌파:** <span style="color: gray;">대기 중</span>
+    * **2. 거래량 분석:** <span style="color: gray;">대기 중</span>
+    * **3. 고래 체결량:** <span style="color: gray;">데이터 수집 전</span>
+    * **4. 다이버전스:** <span style="color: gray;">데이터 수집 전</span>
+    <hr>
+    *향후 모든 매매 기법의 상세 결과가 여기에 나열됩니다.*
+    """)
 
 st.divider()
 
@@ -187,3 +203,4 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
+

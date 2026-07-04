@@ -141,7 +141,7 @@ status_col1, status_col2 = st.columns(2)
 status_col1.info("📊 현재 전략: 대기중")
 status_col2.warning("⚪ 신호: 신호 없음")
 
-with st.expander("🔍 매매 이유 상세 보기 (펼치기)"):
+with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
     st.markdown("""
     * **1. 지지/저항 돌파:** <span style="color: gray;">대기 중</span>
     * **2. 거래량 분석:** <span style="color: gray;">대기 중</span>
@@ -155,7 +155,7 @@ st.divider()
 
 # 매매 버튼
 b1, b2, b3 = st.columns(3)
-if b1.button("롱 진입", use_container_width=True):
+if b1.button("롱 매수", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
@@ -167,7 +167,7 @@ if b1.button("롱 진입", use_container_width=True):
         st.session_state.msg_type = "error"
         st.rerun()
 
-if b2.button("숏 진입", use_container_width=True):
+if b2.button("숏 매수", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
@@ -179,7 +179,7 @@ if b2.button("숏 진입", use_container_width=True):
         st.session_state.msg_type = "error"
         st.rerun()
 
-if b3.button("❌ 종료", use_container_width=True):
+if b3.button("❌ 전체 포지션 종료", use_container_width=True):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']

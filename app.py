@@ -44,7 +44,7 @@ def get_price():
 
 price = get_price()
 
-st.markdown("<div style='font-size: 28px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
+st.markdown("<div style='font-size: 34px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
 
 
 # 실전/가상 매매 및 교차/격리 모드 선택

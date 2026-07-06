@@ -15,7 +15,7 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-bottom: 42px;
+        margin-bottom: 20px;
         border-radius: 5px;
         font-weight: bold;
         width: 100%;
@@ -45,7 +45,7 @@ def get_price():
 price = get_price()
 
 # 제목 글자 크기 조절 (font-size 숫자 변경 가능)
-st.markdown("<div style='font-size: 20px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
+st.markdown("<div style='font-size: 42px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
 
 # 실전/가상 매매 및 교차/격리 모드 선택
 col_mode1, col_mode2 = st.columns(2)

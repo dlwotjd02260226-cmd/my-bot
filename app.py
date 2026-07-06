@@ -137,12 +137,12 @@ else:
         """, unsafe_allow_html=True)
 
 # 매매 판단 엔진 상태
-st.subheader("매매 판단 엔진 상태")
+st.subheader("매매 분석 엔진 상태")
 status_col1, status_col2 = st.columns(2)
 status_col1.info("📊 현재 전략: 대기중")
 status_col2.warning("⚪ 신호: 신호 없음")
 
-with st.expander("🔍 매매 이유 상세 보기 (펼치기)"):
+with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
     st.markdown("""
     * 1. 지지/저항 돌파: <span style="color: gray;">대기 중</span>
     * 2. 거래량 분석: <span style="color: gray;">대기 중</span>

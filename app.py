@@ -137,12 +137,12 @@ else:
         """, unsafe_allow_html=True)
 
 # 매매 판단 엔진 상태 패널
-st.subheader("매매 판단 엔진 상태")
+st.subheader("매매 분석 엔진 상태")
 status_col1, status_col2 = st.columns(2)
 status_col1.info("📊 현재 전략: 대기중")
 status_col2.warning("⚪ 신호: 신호 없음")
 
-with st.expander("🔍 매매 이유 상세 보기 (펼치기)"):
+with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
     st.markdown("""
     * **1. 지지/저항 돌파:** <span style="color: gray;">대기 중</span>
     * **2. 거래량 분석:** <span style="color: gray;">대기 중</span>
@@ -180,7 +180,7 @@ if b2.button("숏 진입", use_container_width=True):
         st.session_state.msg_type = "error"
         st.rerun()
 
-if b3.button("❌ 종료", use_container_width=True):
+if b3.button("❌ 전체 포지션 종료", use_container_width=True):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']

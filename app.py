@@ -137,7 +137,7 @@ else:
         """, unsafe_allow_html=True)
 
 # [추가] 매매 판단 엔진 상태 패널
-st.subheader("매매 판단 엔진 상태")
+st.subheader("매매 분석 엔진 상태")
 status_col1, status_col2 = st.columns(2)
 status_col1.info("📊 현재 전략: 대기중")
 status_col2.warning("⚪ 신호: 신호 없음")

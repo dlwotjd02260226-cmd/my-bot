@@ -180,7 +180,7 @@ if b2.button("숏 진입", use_container_width=True):
         st.session_state.msg_type = "error"
         st.rerun()
 
-if b3.button("❌ 종료", use_container_width=True):
+if b3.button("❌ 전체 포지션 종료", use_container_width=True):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']
@@ -205,4 +205,3 @@ for log in reversed(st.session_state.logs[-10:]):
 time.sleep(0.3)
 st.rerun()
 st.rerun()
-

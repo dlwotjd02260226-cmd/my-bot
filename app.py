@@ -110,7 +110,7 @@ for tf, t_weight in time_weights.items():
         total_score += final_score
         analysis_summary.append((tf, final_score, supports, resistances))
 
-# 자동 청산 로직 (잔고 반영 즉시 실행)
+# 자동 청산 로직 (st.rerun 위치와 조건 최적화)
 for p in st.session_state.positions[:]:
     pnl_pct = ((price - p['entry']) if p['type']=='롱' else (p['entry']-price)) / p['entry'] * 100 * p['lev']
     if st.session_state.mode == "수동":
@@ -127,7 +127,6 @@ for p in st.session_state.positions[:]:
         st.session_state.positions.remove(p)
         st.rerun()
 
-# 자산 및 변동금액 산출
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
 total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
 current_total_asset = st.session_state.balance + total_margin_in_pos + total_pos_pnl
@@ -182,7 +181,7 @@ with st.container(border=True):
             st.rerun()
         col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
 
-# 보유 포지션 출력 (데이터 즉시 반영)
+# 보유 포지션 출력
 st.subheader("보유 중인 포지션")
 if not st.session_state.positions:
     st.write("보유 포지션 없음")
@@ -257,3 +256,4 @@ for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 time.sleep(0.3)
 st.rerun()
+

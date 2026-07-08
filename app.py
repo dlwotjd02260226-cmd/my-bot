@@ -35,7 +35,16 @@ st.set_page_config(page_title="BTC Bot", layout="centered")
 # CSS: 메시지 영역 및 스타일
 st.markdown("""
     <style>
-    .fixed-msg-area { height: 70px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; border-radius: 5px; font-weight: bold; width: 100%; }
+    .fixed-msg-area {
+        height: 70px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+        border-radius: 5px;
+        font-weight: bold;
+        width: 100%;
+    }
     .msg-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .msg-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
@@ -173,24 +182,28 @@ with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
             total_score += final_score
             analysis_summary.append((tf, final_score, supports, resistances))
 
-    decision = "⚪ 시장 관망"
-    if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
-    elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
+    # 가장 가까운 지지/저항 계산
+    all_sups = sorted([s for _, _, sup, _ in analysis_summary for s in sup if s < price], reverse=True)
+    all_res = sorted([r for _, _, _, res in analysis_summary for r in res if r > price])
+    nearest_sup = all_sups[0] if all_sups else 0
+    nearest_res = all_res[0] if all_res else 999999
 
+    # [봇의 실시간 대응 가이드 추가]
+    st.markdown("### 🤖 실시간 대응 가이드")
+    for p in st.session_state.positions:
+        if p['type'] == '롱':
+            if abs(price - nearest_res) / price < 0.003: st.warning(f"⚠️ **[롱 포지션]** 저항선({nearest_res:.2f}) 도달! 익절 혹은 부분 매도를 강력 추천합니다.")
+            if abs(price - nearest_sup) / price < 0.003: st.error(f"⚠️ **[롱 포지션]** 지지선({nearest_sup:.2f}) 위협! 손절을 고려하세요.")
+        else: # 숏 포지션
+            if abs(price - nearest_sup) / price < 0.003: st.warning(f"⚠️ **[숏 포지션]** 지지선({nearest_sup:.2f}) 도달! 익절 혹은 부분 매도를 강력 추천합니다.")
+            if abs(price - nearest_res) / price < 0.003: st.error(f"⚠️ **[숏 포지션]** 저항선({nearest_res:.2f}) 돌파! 손절 대응 필요.")
+
+    decision = "⚪ 시장 관망"
+    if total_score >= 25: decision = f"🟢 강력한 롱 진입 구간 ({nearest_sup:.2f} 지지)"
+    elif total_score <= -25: decision = f"🔴 강력한 숏 진입 구간 ({nearest_res:.2f} 저항)"
+    
     st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
     st.warning(f"⚪ 신호: {decision}")
-    
-    # [상세 분석 대시보드 추가]
-    st.markdown("---")
-    st.markdown("### 📋 기법별 상세 분석 근거")
-    if total_score > 10: st.success("✅ **매물대: 지지 구간 강세** - 가격이 주요 지지 매물대 위에 안착하여 롱 진입 유리.")
-    elif total_score < -10: st.error("✅ **매물대: 저항 구간 강세** - 가격이 주요 저항 매물대에 도달하여 숏 진입 유리.")
-    else: st.info("✅ **매물대: 중립** - 방향성 확인 필요.")
-    
-    st.markdown("### 💡 최종 행동 가이드")
-    if total_score >= 25: st.write("👉 **롱 진입:** 매물대 지지력이 매우 강합니다. 분할 매수 대응.")
-    elif total_score <= -25: st.write("👉 **숏 진입:** 매물대 저항력이 매우 강합니다. 매도 관점 접근.")
-    else: st.write("👉 **관망:** 신호를 기다리세요.")
 
     for tf, f_score, sup, res in analysis_summary:
         st.markdown(f"**📍 {tf} 차트 (가중 점수: {f_score:.1f})**")

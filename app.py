@@ -154,31 +154,34 @@ else:
 
 # 매매 판단 엔진 상태
 st.subheader("매매 분석 엔진 상태")
-
-# --- 계산 로직 미리 실행 ---
-time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
-total_score = 0
-analysis_summary = []
-strategy_tier = 1.5 
-
-for tf, t_weight in time_weights.items():
-    df = get_klines(tf)
-    if df is not None and not df.empty:
-        score, supports, resistances = calculate_sr_score(price, df)
-        final_score = score * strategy_tier * t_weight
-        total_score += final_score
-        analysis_summary.append((tf, final_score, supports, resistances))
-
-decision = "⚪ 시장 관망"
-if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
-elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
-
-# --- 점수 및 신호 (expander 밖으로 이동) ---
-st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
-st.warning(f"⚪ 신호: {decision}")
+status_col1, status_col2 = st.columns(2)
+status_col1.info("📊 현재 전략: 매물대 분석")
+status_col2.warning("⚪ 신호: 계산 중")
 
 with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
-    # [상세 분석 대시보드]
+    # [지능형 엔진: 매물대 가중치 분석 시작]
+    time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
+    total_score = 0
+    analysis_summary = []
+    strategy_tier = 1.5 
+
+    for tf, t_weight in time_weights.items():
+        df = get_klines(tf)
+        if df is not None and not df.empty:
+            score, supports, resistances = calculate_sr_score(price, df)
+            final_score = score * strategy_tier * t_weight
+            total_score += final_score
+            analysis_summary.append((tf, final_score, supports, resistances))
+
+    decision = "⚪ 시장 관망"
+    if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
+    elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
+
+    st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
+    st.warning(f"⚪ 신호: {decision}")
+    
+    # [상세 분석 대시보드 추가]
+    st.markdown("---")
     st.markdown("### 📋 기법별 상세 분석 근거")
     if total_score > 10: st.success("✅ **매물대: 지지 구간 강세** - 가격이 주요 지지 매물대 위에 안착하여 롱 진입 유리.")
     elif total_score < -10: st.error("✅ **매물대: 저항 구간 강세** - 가격이 주요 저항 매물대에 도달하여 숏 진입 유리.")

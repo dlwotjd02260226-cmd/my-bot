@@ -112,7 +112,7 @@ for tf, t_weight in time_weights.items():
         total_score += final_score
         analysis_summary.append((tf, final_score, supports, resistances))
 
-# 자동 청산 로직 (수정: 누적 수익 변수 활용)
+# 자동 청산 로직
 for p in st.session_state.positions[:]:
     pnl_pct = ((price - p['entry']) if p['type']=='롱' else (p['entry']-price)) / p['entry'] * 100 * p['lev']
     if st.session_state.mode == "수동":
@@ -120,24 +120,26 @@ for p in st.session_state.positions[:]:
     else:
         target_tp = 3.5 + (max(0, abs(total_score) - 25) / 10) 
         target_sl = 1.5
+    
     if pnl_pct >= target_tp or pnl_pct <= -target_sl:
         action = "익절" if pnl_pct > 0 else "손절"
         pnl_val = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         
-        # 누적 수익 업데이트
         if pnl_val > 0: st.session_state.wins_total += pnl_val
         else: st.session_state.losses_total += abs(pnl_val)
         
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} {st.session_state.mode} {action}({pnl_pct:.2f}%): {pnl_val:.2f} USDT")
+        reason = f"{action}가 충족되어 포지션 정리"
+        log_type = "자동" if st.session_state.auto_trading else "수동"
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}배팅 | {p['type']} 포지션 {reason} ({pnl_val:+.2f} USDT)")
+        
         st.session_state.balance += (p['margin'] + pnl_val)
         st.session_state.positions.remove(p)
         st.rerun()
 
 # [수정된 핵심 자산 계산 로직]
-# 총자산 = 가용 잔고 + 미실현 손익
-# (포지션 증거금은 이미 잔고에서 차감된 상태이므로 다시 더하지 않아야 자산이 정확합니다)
+# 배팅금을 차감/합산하지 않고, 초기 자본금에서 손익만 누적하여 계산
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
-current_total_asset = st.session_state.balance + total_pos_pnl
+current_total_asset = 10000.0 + st.session_state.wins_total - st.session_state.losses_total + total_pos_pnl
 
 st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{total_pos_pnl:+.2f} USDT")
@@ -150,16 +152,6 @@ st.markdown(f"""
 
 # 자동 매매 제어 영역
 with st.container(border=True):
-    msg_placeholder = st.empty()
-    if st.session_state.msg:
-        c_class = "msg-success" if st.session_state.msg_type == "success" else "msg-error"
-        msg_placeholder.markdown(f'<div class="fixed-msg-area {c_class}">{st.session_state.msg}</div>', unsafe_allow_html=True)
-        time.sleep(1)
-        st.session_state.msg = None
-        st.rerun()
-    else:
-        msg_placeholder.markdown('<div class="fixed-msg-area" style="background-color: transparent;"></div>', unsafe_allow_html=True)
-
     col_auto1, col_auto2 = st.columns(2)
     if st.session_state.auto_trading:
         col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)
@@ -169,7 +161,7 @@ with st.container(border=True):
                 pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
                 if pnl > 0: st.session_state.wins_total += pnl
                 else: st.session_state.losses_total += abs(pnl)
-                st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 자동 종료: {pnl:+.2f} USDT")
+                st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 자동배팅 | {p['type']} 전체 포지션 강제종료 ({pnl:+.2f} USDT)")
                 st.session_state.balance += (p['margin'] + pnl)
             st.session_state.positions = []
             st.rerun()
@@ -187,7 +179,7 @@ else:
         liq_price = p['entry'] * (1 - (1 / p['lev'])) if p['type'] == '롱' else p['entry'] * (1 + (1 / p['lev']))
         st.markdown(f"""
         <div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; margin-bottom: 5px; font-size: 16px;">
-        <div style="font-weight: bold;">{p['time']} | {p['type']} ({p['mode']}) | {p['lev']}x</div>
+        <div style="font-weight: bold;">{p['time']} | {p['type']} | {p['lev']}x</div>
         <div style="display: flex; justify-content: space-between;">
         <span>진입가: <b style="color: blue;">{p['entry']:.2f}</b></span>
         <span>청산가: <b style="color: red;">{liq_price:.2f}</b></span>
@@ -222,28 +214,24 @@ st.divider()
 b1, b2, b3 = st.columns(3)
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
+        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | 롱 진입")
         st.rerun()
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
+        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | 숏 진입")
         st.rerun()
 if b3.button("❌ 전체 포지션 종료", use_container_width=True):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         if pnl > 0: st.session_state.wins_total += pnl
         else: st.session_state.losses_total += abs(pnl)
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | 전체 포지션 강제종료 ({pnl:+.2f} USDT)")
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
-    st.rerun()
-if st.button("🔄 가상머니 초기화", use_container_width=True):
-    st.session_state.balance = 10000.0
-    st.session_state.positions = []
-    st.session_state.logs = []
-    st.session_state.wins_total = 0.0
-    st.session_state.losses_total = 0.0
     st.rerun()
 
 st.subheader("거래 로그")
@@ -251,3 +239,4 @@ for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 time.sleep(0.3)
 st.rerun()
+

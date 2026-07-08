@@ -120,8 +120,8 @@ for p in st.session_state.positions[:]:
         target_sl = 1.5
     if pnl_pct >= target_tp or pnl_pct <= -target_sl:
         action = "익절" if pnl_pct > 0 else "손절"
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} {st.session_state.mode} {action}({pnl_pct:.2f}%)")
         pnl_val = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} {st.session_state.mode} {action}({pnl_pct:.2f}%): {pnl_val:.2f} USDT")
         st.session_state.balance += (p['margin'] + pnl_val)
         st.session_state.positions.remove(p)
         st.rerun()
@@ -130,8 +130,16 @@ total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-p
 total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
 current_total_asset = st.session_state.balance + total_margin_in_pos + total_pos_pnl
 
-total_wins = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st.session_state.logs if float(log.split(": ")[-1].replace(" USDT", "")) > 0)
-total_losses = sum(float(log.split(": ")[-1].replace(" USDT", "")) for log in st.session_state.logs if float(log.split(": ")[-1].replace(" USDT", "")) <= 0)
+# 안전한 로그 합계 계산
+total_wins, total_losses = 0.0, 0.0
+for log in st.session_state.logs:
+    try:
+        part = log.split(": ")[-1]
+        if " USDT" in part:
+            amt_val = float(part.replace(" USDT", ""))
+            if amt_val > 0: total_wins += amt_val
+            else: total_losses += amt_val
+    except: continue
 
 st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{total_pos_pnl:+.2f} USDT")
@@ -192,6 +200,7 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
+# [통합된 매매 상태 섹션]
 with st.container(border=True):
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
     st.markdown("<p style='font-size: 22px; font-weight: bold;'>매매 분석 엔진 상태</p>", unsafe_allow_html=True)
@@ -228,7 +237,7 @@ if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
-        st.session_state.msg = "📈 롱 진입 완료"
+        st.session_state.msg = "📈 롱 진입"
         st.session_state.msg_type = "success"
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 롱 진입: {price}")
         st.rerun()
@@ -236,7 +245,7 @@ if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
-        st.session_state.msg = "📉 숏 진입 완료"
+        st.session_state.msg = "📉 숏 진입"
         st.session_state.msg_type = "success"
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 숏 진입: {price}")
         st.rerun()
@@ -245,7 +254,7 @@ if b3.button("❌ 전체 포지션 종료", use_container_width=True):
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
-    st.session_state.msg = "🛑 전체 포지션 종료"
+    st.session_state.msg = "🛑 전체 종료"
     st.session_state.msg_type = "error"
     st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 전체 포지션 종료")
     st.rerun()
@@ -253,7 +262,7 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.balance = 10000.0
     st.session_state.positions = []
     st.session_state.logs = []
-    st.session_state.msg = "🔄 가상 머니 초기화"
+    st.session_state.msg = "🔄 초기화 완료"
     st.session_state.msg_type = "success"
     st.rerun()
 st.subheader("거래 로그")

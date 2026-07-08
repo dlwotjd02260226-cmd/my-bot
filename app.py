@@ -171,7 +171,8 @@ elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
 # [1. 종합 매매 점수 칸]
 with st.container(border=True):
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
-    st.warning(f"<p style='font-size: 18px;'>⚪ 신호: {decision}</p>", unsafe_allow_html=True)
+    # 오류 수정: st.warning 제거 및 st.markdown으로 커스텀 박스 구현
+    st.markdown(f"<div style='background-color: #fff3cd; padding: 10px; border-radius: 5px; font-size: 18px; color: #856404;'>⚪ 신호: {decision}</div>", unsafe_allow_html=True)
 
 # [2. 매매 분석 엔진 상태 칸 (상세 보기 이동)]
 with st.container(border=True):

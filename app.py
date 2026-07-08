@@ -176,9 +176,14 @@ with st.container(border=True):
     status_col1.info("📊 현재 전략: 매물대 분석")
     
     # 신호 표시
-    if total_score >= 25: status_col2.success("🟢 신호: 롱 진입")
-    elif total_score <= -25: status_col2.error("🔴 신호: 숏 진입")
-    else: status_col2.warning("⚪ 신호: 계산 중")
+    if st.session_state.positions:
+        p = st.session_state.positions[0]
+        pnl_val = ((price - p['entry']) if p['type']=='롱' else (p['entry']-price)) / p['entry'] * 100
+        if pnl_val > 0: status_col2.success(f"🟢 {p['type']}포지션 익절 신호: {p['type']}포지션 익절합니다.")
+        else: status_col2.error(f"🔴 {p['type']}포지션 손절 신호: {p['type']}포지션 손절합니다.")
+    elif total_score >= 25: status_col2.success("🟢 롱 진입 신호: 롱 진입합니다.")
+    elif total_score <= -25: status_col2.error("🔴 숏 진입 신호: 숏 진입합니다.")
+    else: status_col2.warning("⚪ 신호: 계산 중 (진입 대기)")
     
     with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
         st.markdown("<p style='font-size: 20px; font-weight: bold;'>📋 기법별 상세 분석 근거</p>", unsafe_allow_html=True)

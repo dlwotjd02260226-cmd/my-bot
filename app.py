@@ -4,10 +4,9 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
-import numpy as np # 구간 분석을 위한 numpy 추가
 
 # [필수 엔진 함수]
-def get_klines(tf='1h', limit=500): # 500개 봉 수집으로 변경
+def get_klines(tf='1h', limit=50):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)
@@ -19,16 +18,6 @@ def get_klines(tf='1h', limit=500): # 500개 봉 수집으로 변경
         df['low'] = df['low'].astype(float)
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
-
-# [추가된 500봉 분석 구간 엔진]
-def get_strong_zones(df, price):
-    df['bin'] = pd.cut(df['close'], bins=50)
-    density = df.groupby('bin')['close'].count()
-    threshold = density.mean() * 1.5
-    strong_zones = density[density > threshold].index
-    supports = sorted([z.left for z in strong_zones if z.right < price], reverse=True)
-    resistances = sorted([z.left for z in strong_zones if z.left > price])
-    return supports[:3], resistances[:3]
 
 def calculate_sr_score(price, df):
     supports = [df['low'].iloc[i] for i in range(5, len(df)-5) if df['low'].iloc[i] < df['low'].iloc[i-5:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+6].min()]
@@ -165,42 +154,31 @@ else:
 
 # 매매 판단 엔진 상태
 st.subheader("매매 분석 엔진 상태")
-status_col1, status_col2 = st.columns(2)
-status_col1.info("📊 현재 전략: 매물대 분석")
-status_col2.warning("⚪ 신호: 계산 중")
+
+# --- 계산 로직 미리 실행 ---
+time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
+total_score = 0
+analysis_summary = []
+strategy_tier = 1.5 
+
+for tf, t_weight in time_weights.items():
+    df = get_klines(tf)
+    if df is not None and not df.empty:
+        score, supports, resistances = calculate_sr_score(price, df)
+        final_score = score * strategy_tier * t_weight
+        total_score += final_score
+        analysis_summary.append((tf, final_score, supports, resistances))
+
+decision = "⚪ 시장 관망"
+if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
+elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
+
+# --- 점수 및 신호 (expander 밖으로 이동) ---
+st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
+st.warning(f"⚪ 신호: {decision}")
 
 with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
-    # [기존 로직]
-    time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
-    total_score = 0
-    analysis_summary = []
-    strategy_tier = 1.5 
-
-    for tf, t_weight in time_weights.items():
-        df = get_klines(tf)
-        if df is not None and not df.empty:
-            score, supports, resistances = calculate_sr_score(price, df)
-            final_score = score * strategy_tier * t_weight
-            total_score += final_score
-            analysis_summary.append((tf, final_score, supports, resistances))
-
-    decision = "⚪ 시장 관망"
-    if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
-    elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
-
-    st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
-    st.warning(f"⚪ 신호: {decision}")
-    
-    # [추가된 500봉 구간 분석]
-    st.markdown("---")
-    st.markdown("### 🤖 500봉 매물대 구간 분석")
-    df_500 = get_klines('1h', limit=500)
-    if df_500 is not None:
-        s_zones, r_zones = get_strong_zones(df_500, price)
-        st.write(f"🛡️ 강력 지지 구간: {s_zones}")
-        st.write(f"⚔️ 강력 저항 구간: {r_zones}")
-
-    st.markdown("---")
+    # [상세 분석 대시보드]
     st.markdown("### 📋 기법별 상세 분석 근거")
     if total_score > 10: st.success("✅ **매물대: 지지 구간 강세** - 가격이 주요 지지 매물대 위에 안착하여 롱 진입 유리.")
     elif total_score < -10: st.error("✅ **매물대: 저항 구간 강세** - 가격이 주요 저항 매물대에 도달하여 숏 진입 유리.")

@@ -4,9 +4,10 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
+import numpy as np
 
 # [필수 엔진 함수]
-def get_klines(tf='1h', limit=50):
+def get_klines(tf='1h', limit=500): # 500개 봉 수집으로 수정
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)
@@ -18,6 +19,16 @@ def get_klines(tf='1h', limit=50):
         df['low'] = df['low'].astype(float)
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
+
+# [500개 봉 분석 구간 엔진 추가]
+def get_strong_zones(df, price):
+    df['bin'] = pd.cut(df['close'], bins=50)
+    density = df.groupby('bin')['close'].count()
+    threshold = density.mean() * 1.5
+    strong_zones = density[density > threshold].index
+    supports = sorted([z.left for z in strong_zones if z.right < price], reverse=True)
+    resistances = sorted([z.left for z in strong_zones if z.left > price])
+    return supports[:3], resistances[:3]
 
 def calculate_sr_score(price, df):
     supports = [df['low'].iloc[i] for i in range(5, len(df)-5) if df['low'].iloc[i] < df['low'].iloc[i-5:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+6].min()]
@@ -159,56 +170,30 @@ status_col1.info("📊 현재 전략: 매물대 분석")
 status_col2.warning("⚪ 신호: 계산 중")
 
 with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
-    # [상세 매매 가이드 엔진]
-    time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
-    total_score = 0
-    all_s, all_r = [], []
-    analysis_summary = []
-
-    for tf, t_weight in time_weights.items():
-        df = get_klines(tf)
-        if df is not None and not df.empty:
-            score, supports, resistances = calculate_sr_score(price, df)
-            total_score += (score * 1.5 * t_weight)
-            all_s.extend(supports)
-            all_r.extend(resistances)
-            analysis_summary.append((tf, score * 1.5 * t_weight, supports, resistances))
-
-    # 가장 가까운 지지/저항선 찾기
-    n_s = max([s for s in all_s if s < price], default=0)
-    n_r = min([r for r in all_r if r > price], default=999999)
-
-    st.markdown("### 🤖 상세 매매 판단 근거")
-    # 보유 포지션에 따른 상세 이유 설명
-    for p in st.session_state.positions:
-        if p['type'] == '롱':
-            if abs(price - n_r)/price < 0.003: 
-                st.warning(f"✅ **[익절 제안]** 현재가 {price:.2f}가 저항선 {n_r:.2f}에 도달했습니다. 저항 매물대로 인해 추가 상승이 제한될 수 있으므로 수익을 실현하십시오.")
-            if abs(price - n_s)/price < 0.003: 
-                st.error(f"❌ **[손절 제안]** 현재가 {price:.2f}가 지지선 {n_s:.2f}를 위협합니다. 지지 실패 시 추가 하락이 예상되니 손절로 리스크를 관리하세요.")
-        else: # 숏
-            if abs(price - n_s)/price < 0.003: 
-                st.warning(f"✅ **[익절 제안]** 현재가 {price:.2f}가 지지선 {n_s:.2f}에 도달했습니다. 지지 반등 가능성이 높으니 수익을 확보하십시오.")
-            if abs(price - n_r)/price < 0.003: 
-                st.error(f"❌ **[손절 제안]** 현재가 {price:.2f}가 저항선 {n_r:.2f}를 돌파했습니다. 저항선 돌파는 상승 추세 시작을 의미하므로 손절이 필요합니다.")
-
-    # 신규 진입 근거
-    st.markdown("### 💡 진입/관망 근거")
-    if total_score >= 25:
-        st.success(f"🟢 **[롱 진입 근거]** 현재 가격이 {n_s:.2f}(지지) 근처에서 안정적인 흐름을 보이고 있습니다. 반등을 기대하고 롱 포지션을 진입하십시오.")
-    elif total_score <= -25:
-        st.error(f"🔴 **[숏 진입 근거]** 현재 가격이 {n_r:.2f}(저항)를 넘지 못하고 있습니다. 강력한 매도 매물대 근처이므로 숏 진입을 권장합니다.")
-    else:
-        st.info(f"⚪ **[관망 근거]** 현재 가격 {price:.2f}가 지지선({n_s:.2f})과 저항선({n_r:.2f}) 사이에 갇혀 있습니다. 방향성이 명확해질 때까지 관망하십시오.")
-
-    st.markdown("---")
-    st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
-    for tf, f_score, sup, res in analysis_summary:
-        st.markdown(f"**📍 {tf} 차트 (가중 점수: {f_score:.1f})**")
-        c1, c2 = st.columns(2)
-        c1.write("🛡️ 지지"); c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
-        c2.write("⚔️ 저항"); c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
-        st.divider()
+    # [통합된 500개 봉 구간 분석 엔진]
+    df = get_klines('1h', limit=500)
+    if df is not None:
+        supports, resistances = get_strong_zones(df, price)
+        
+        # 1. 종합 매물대 점수
+        st.markdown("### 📊 종합 매물대 점수")
+        score = (len(supports) + len(resistances)) * 10
+        st.warning(f"현재 데이터 기반 분석 점수: {score}점")
+        
+        # 2. 진입 근거 및 가이드
+        st.markdown("### 🤖 상세 매매 판단 근거")
+        s_val = supports[0] if supports else 0
+        r_val = resistances[0] if resistances else 999999
+        
+        if abs(price - s_val)/price < 0.01:
+            st.success(f"✅ **[롱 근거]** 지난 500봉간 {s_val:.2f} 부근에서 강력한 지지가 확인되었습니다.")
+        elif abs(price - r_val)/price < 0.01:
+            st.warning(f"⚠️ **[숏 근거]** 지난 500봉간 {r_val:.2f} 부근에서 강력한 저항이 확인되었습니다.")
+        else:
+            st.info("⚪ **[관망]** 주요 매물대 구간과 거리가 있어 방향성 확인이 필요합니다.")
+            
+        st.write(f"🛡️ 주요 지지대: {supports}")
+        st.write(f"⚔️ 주요 저항대: {resistances}")
 
 st.divider()
 
@@ -262,4 +247,3 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
-

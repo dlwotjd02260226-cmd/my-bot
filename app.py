@@ -60,7 +60,7 @@ def get_price():
 
 price = get_price()
 
-# 제목 글자 크기 조절
+# 제목
 st.markdown("<div style='font-size: 42px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
 
 # 실전/가상 매매 및 교차/격리 모드 선택
@@ -171,10 +171,9 @@ elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
 # [1. 종합 매매 점수 칸]
 with st.container(border=True):
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
-    # 오류 수정: st.warning 제거 및 st.markdown으로 커스텀 박스 구현
     st.markdown(f"<div style='background-color: #fff3cd; padding: 10px; border-radius: 5px; font-size: 18px; color: #856404;'>⚪ 신호: {decision}</div>", unsafe_allow_html=True)
 
-# [2. 매매 분석 엔진 상태 칸 (상세 보기 이동)]
+# [2. 매매 분석 엔진 상태 칸]
 with st.container(border=True):
     st.markdown("<p style='font-size: 22px; font-weight: bold;'>매매 분석 엔진 상태</p>", unsafe_allow_html=True)
     status_col1, status_col2 = st.columns(2)
@@ -195,8 +194,10 @@ with st.container(border=True):
         for tf, f_score, sup, res in analysis_summary:
             st.markdown(f"<p style='font-size: 18px; font-weight: bold;'>📍 {tf} 차트 (가중 점수: {f_score:.1f})</p>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
-            c1.write("<p style='font-size: 16px;'>🛡️ 지지</p>", unsafe_allow_html=True); c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
-            c2.write("<p style='font-size: 16px;'>⚔️ 저항</p>", unsafe_allow_html=True); c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
+            c1.markdown("<p style='font-size: 16px;'>🛡️ 지지</p>", unsafe_allow_html=True)
+            c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
+            c2.markdown("<p style='font-size: 16px;'>⚔️ 저항</p>", unsafe_allow_html=True)
+            c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
             st.divider()
 
 st.divider()
@@ -251,3 +252,4 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
+

@@ -92,7 +92,7 @@ st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{total_pos_pnl:+.2f} USDT")
 
 st.markdown(f"""
-<div style="font-size: 0.9em; margin-bottom: 20px;">
+<div style="font-size: 16px; margin-bottom: 20px;">
 누적: <span style="color: green;">익절 {total_wins:,.2f}</span> / <span style="color: red;">손절 {total_losses:,.2f}</span> USDT
 </div>
 """, unsafe_allow_html=True)
@@ -143,7 +143,7 @@ else:
     for p in st.session_state.positions:
         liq_price = p['entry'] * (1 - (1 / p['lev'])) if p['type'] == '롱' else p['entry'] * (1 + (1 / p['lev']))
         st.markdown(f"""
-        <div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; margin-bottom: 5px;">
+        <div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; margin-bottom: 5px; font-size: 16px;">
         <div style="font-weight: bold;">{p['time']} | {p['type']} ({p['mode']}) | {p['lev']}x</div>
         <div style="display: flex; justify-content: space-between;">
         <span>진입가: <b style="color: blue;">{p['entry']:.2f}</b></span>
@@ -168,34 +168,34 @@ decision = "⚪ 시장 관망"
 if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
 elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
 
-# [1. 종합 매매 점수 칸 (포지션 아래 독립 박스)]
+# [1. 종합 매매 점수 칸]
 with st.container(border=True):
-    st.markdown(f"### 📊 종합 매매 점수: {total_score:.1f}점")
-    st.warning(f"⚪ 신호: {decision}")
+    st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
+    st.warning(f"<p style='font-size: 18px;'>⚪ 신호: {decision}</p>", unsafe_allow_html=True)
 
-# [2. 매매 분석 엔진 상태 칸 (상세 분석 펼치기 이동)]
+# [2. 매매 분석 엔진 상태 칸 (상세 보기 이동)]
 with st.container(border=True):
-    st.subheader("매매 분석 엔진 상태")
+    st.markdown("<p style='font-size: 22px; font-weight: bold;'>매매 분석 엔진 상태</p>", unsafe_allow_html=True)
     status_col1, status_col2 = st.columns(2)
     status_col1.info("📊 현재 전략: 매물대 분석")
     status_col2.warning("⚪ 신호: 계산 중")
     
     with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
-        st.markdown("### 📋 기법별 상세 분석 근거")
-        if total_score > 10: st.success("✅ **분석: 지지 구간 강세** - 종합 점수가 지지 우위를 가리킵니다.")
-        elif total_score < -10: st.error("✅ **분석: 저항 구간 강세** - 종합 점수가 저항 우위를 가리킵니다.")
-        else: st.info("✅ **분석: 중립** - 방향성 확인 필요.")
+        st.markdown("<p style='font-size: 20px; font-weight: bold;'>📋 기법별 상세 분석 근거</p>", unsafe_allow_html=True)
+        if total_score > 10: st.markdown("<p style='font-size: 16px; color: green;'>✅ **분석: 지지 구간 강세** - 종합 점수가 지지 우위를 가리킵니다.</p>", unsafe_allow_html=True)
+        elif total_score < -10: st.markdown("<p style='font-size: 16px; color: red;'>✅ **분석: 저항 구간 강세** - 종합 점수가 저항 우위를 가리킵니다.</p>", unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size: 16px; color: grey;'>✅ **분석: 중립** - 방향성 확인 필요.</p>", unsafe_allow_html=True)
         
-        st.markdown("### 💡 최종 행동 가이드")
-        if total_score >= 25: st.write("👉 **롱 진입:** 종합 점수가 매우 강한 롱을 가리킵니다.")
-        elif total_score <= -25: st.write("👉 **숏 진입:** 종합 점수가 매우 강한 숏을 가리킵니다.")
-        else: st.write("👉 **관망:** 신호를 기다리세요.")
+        st.markdown("<p style='font-size: 20px; font-weight: bold;'>💡 최종 행동 가이드</p>", unsafe_allow_html=True)
+        if total_score >= 25: st.markdown("<p style='font-size: 16px;'>👉 **롱 진입:** 종합 점수가 매우 강한 롱을 가리킵니다.</p>", unsafe_allow_html=True)
+        elif total_score <= -25: st.markdown("<p style='font-size: 16px;'>👉 **숏 진입:** 종합 점수가 매우 강한 숏을 가리킵니다.</p>", unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size: 16px;'>👉 **관망:** 신호를 기다리세요.</p>", unsafe_allow_html=True)
 
         for tf, f_score, sup, res in analysis_summary:
-            st.markdown(f"**📍 {tf} 차트 (가중 점수: {f_score:.1f})**")
+            st.markdown(f"<p style='font-size: 18px; font-weight: bold;'>📍 {tf} 차트 (가중 점수: {f_score:.1f})</p>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
-            c1.write("🛡️ 지지"); c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
-            c2.write("⚔️ 저항"); c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
+            c1.write("<p style='font-size: 16px;'>🛡️ 지지</p>", unsafe_allow_html=True); c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
+            c2.write("<p style='font-size: 16px;'>⚔️ 저항</p>", unsafe_allow_html=True); c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
             st.divider()
 
 st.divider()
@@ -250,4 +250,3 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
-

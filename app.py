@@ -168,7 +168,7 @@ decision = "⚪ 시장 관망"
 if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
 elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
 
-# [1. 종합 매매 점수 칸 - 수정됨]
+# [1. 종합 매매 점수 칸]
 with st.container(border=True):
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
 
@@ -186,9 +186,12 @@ with st.container(border=True):
         else: st.markdown("<p style='font-size: 16px; color: grey;'>✅ **분석: 중립** - 방향성 확인 필요.</p>", unsafe_allow_html=True)
         
         st.markdown("<p style='font-size: 20px; font-weight: bold;'>💡 최종 행동 가이드</p>", unsafe_allow_html=True)
-        if total_score >= 25: st.markdown("<p style='font-size: 16px;'>👉 **롱 진입:** 종합 점수가 매우 강한 롱을 가리킵니다.</p>", unsafe_allow_html=True)
-        elif total_score <= -25: st.markdown("<p style='font-size: 16px;'>👉 **숏 진입:** 종합 점수가 매우 강한 숏을 가리킵니다.</p>", unsafe_allow_html=True)
-        else: st.markdown("<p style='font-size: 16px;'>👉 **관망:** 신호를 기다리세요.</p>", unsafe_allow_html=True)
+        if total_score >= 25: 
+            st.markdown("<p style='font-size: 16px;'>👉 **롱 진입:** 종합 점수가 매우 강한 롱을 가리킵니다. 조건 충족 시 진입합니다.</p>", unsafe_allow_html=True)
+        elif total_score <= -25: 
+            st.markdown("<p style='font-size: 16px;'>👉 **숏 진입:** 종합 점수가 매우 강한 숏을 가리킵니다. 조건 충족 시 진입합니다.</p>", unsafe_allow_html=True)
+        else: 
+            st.markdown("<p style='font-size: 16px;'>👉 **모니터링:** 최적의 타점을 위해 신호를 실시간으로 계산하고 있습니다.</p>", unsafe_allow_html=True)
 
         for tf, f_score, sup, res in analysis_summary:
             st.markdown(f"<p style='font-size: 18px; font-weight: bold;'>📍 {tf} 차트 (가중 점수: {f_score:.1f})</p>", unsafe_allow_html=True)

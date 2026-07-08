@@ -171,15 +171,42 @@ status_col2.warning(f"⚪ 신호: {'🟢 롱 진입' if sr_score >= 3 else ('�
 
 with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
     st.markdown(f"""
-    * 1. 지지/저항 돌파: <span style="color: {'green' if abs(sr_score) >= 3 else 'gray'}">{sr_score}점 (분석 완료)</span>
-    * 2. 거래량 분석: <span style="color: gray;">대기 중</span>
-    * 3. 고래 체결량: <span style="color: gray;">데이터 수집 전</span>
-    * 4. 다이버전스: <span style="color: gray;">데이터 수집 전</span>
-    <hr>
-    📍 주요 매물대(30분봉): 
-    - 지지: {[round(x, 2) for x in supports[-3:]]}
-    - 저항: {[round(x, 2) for x in resistances[-3:]]}
-    """)
+        # [지능형 엔진: 매물대 가중치 분석 시작]
+    # 1시간 이상 타임프레임 및 가중치 설정
+    time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
+    total_score = 0
+    analysis_summary = []
+    
+    # 봇이 판단하는 기법 티어 (매물대 기본값 1.5)
+    strategy_tier = 1.5 
+
+    for tf, t_weight in time_weights.items():
+        # 데이터 가져오기 (기존 get_klines 함수 사용)
+        df = get_klines(tf)
+        if df is not None and not df.empty:
+            # 매물대 점수 계산 (기존 calculate_sr_score 함수 사용)
+            score, supports, resistances = calculate_sr_score(price, df)
+            
+            # 가중치 합산: (기법 티어 * 시간대 가중치 * 매물대 점수)
+            final_score = score * strategy_tier * t_weight
+            total_score += final_score
+            analysis_summary.append((tf, final_score, supports, resistances))
+
+    # 종합 점수에 따른 신호 판단
+    decision = "⚪ 시장 관망"
+    if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
+    elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
+
+    # UI 업데이트
+    st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
+    st.warning(f"⚪ 신호: {decision}")
+
+    for tf, f_score, sup, res in analysis_summary:
+        st.markdown(f"**📍 {tf} 차트 (가중 점수: {f_score:.1f})**")
+        c1, c2 = st.columns(2)
+        c1.write("🛡️ 지지"); c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
+        c2.write("⚔️ 저항"); c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
+        st.divider()
 
 st.divider()
 

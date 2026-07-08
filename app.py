@@ -3,12 +3,12 @@ import requests
 import time
 from datetime import datetime
 import streamlit.components.v1 as components
-import pandas as pd  # [추가]
+import pandas as pd # [추가]
 
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
-# [추가] 매물대 분석 엔진 함수 (기존 코드와 충돌 없도록 독립적으로 배치)
+# [추가] 매물대 분석 엔진 함수 (기존 코드 중간 빈 공간에 추가)
 def get_klines(tf='30m', limit=100):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
@@ -161,12 +161,13 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-# [수정] 매매 판단 엔진 상태 (기존 코드 영역에 엔진 결합)
+# [수정] 매매 분석 엔진 상태
 st.subheader("매매 분석 엔진 상태")
 df_30m = get_klines('30m')
 if df_30m is not None:
     sr_score, supports, resistances = calculate_sr_score(price, df_30m)
     decision = "🟢 롱 진입 구간" if sr_score >= 3 else ("🔴 숏 진입 구간" if sr_score <= -3 else "중립 대기")
+    
     status_col1, status_col2 = st.columns(2)
     status_col1.info(f"📊 전략 점수: {sr_score}점")
     status_col2.warning(f"⚪ 신호: {decision}")

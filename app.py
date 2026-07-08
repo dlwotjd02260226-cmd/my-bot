@@ -130,15 +130,15 @@ total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-p
 total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
 current_total_asset = st.session_state.balance + total_margin_in_pos + total_pos_pnl
 
-# [수정된 안전한 로그 계산 로직]
-total_wins, total_losses = 0.0, 0.0
+# [안전한 로그 합계 계산: 원본 방식 유지]
+total_wins = 0.0
+total_losses = 0.0
 for log in st.session_state.logs:
     try:
-        if ": " in log:
-            part = log.split(": ")[-1].replace(" USDT", "")
-            amt_val = float(part)
-            if amt_val > 0: total_wins += amt_val
-            else: total_losses += amt_val
+        if "USDT" in log:
+            val = float(log.split(": ")[-1].replace(" USDT", ""))
+            if val > 0: total_wins += val
+            else: total_losses += val
     except: continue
 
 st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
@@ -150,40 +150,39 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# [수정된 컨테이너 구조: 레이아웃 꼬임 방지]
-with st.container():
-    with st.container(border=True):
-        msg_placeholder = st.empty()
-        if st.session_state.msg:
-            c_class = "msg-success" if st.session_state.msg_type == "success" else "msg-error"
-            msg_placeholder.markdown(f'<div class="fixed-msg-area {c_class}">{st.session_state.msg}</div>', unsafe_allow_html=True)
-            time.sleep(1)
-            st.session_state.msg = None
-            st.rerun()
-        else:
-            msg_placeholder.markdown('<div class="fixed-msg-area" style="background-color: transparent;"></div>', unsafe_allow_html=True)
+# [테두리가 추가된 자동 매매 제어 영역]
+with st.container(border=True):
+    msg_placeholder = st.empty()
+    if st.session_state.msg:
+        c_class = "msg-success" if st.session_state.msg_type == "success" else "msg-error"
+        msg_placeholder.markdown(f'<div class="fixed-msg-area {c_class}">{st.session_state.msg}</div>', unsafe_allow_html=True)
+        time.sleep(1)
+        st.session_state.msg = None
+        st.rerun()
+    else:
+        msg_placeholder.markdown('<div class="fixed-msg-area" style="background-color: transparent;"></div>', unsafe_allow_html=True)
 
-        col_auto1, col_auto2 = st.columns(2)
-        if st.session_state.auto_trading:
-            col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)
-            if col_auto2.button("🔴 자동 매매 종료", use_container_width=True):
-                st.session_state.auto_trading = False
-                st.session_state.msg = "🔴 자동 매매가 종료되었습니다."
-                st.session_state.msg_type = "error"
-                for p in st.session_state.positions:
-                    pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-                    if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']
-                    st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 자동 종료({p['mode']}): {pnl:+.2f} USDT")
-                    st.session_state.balance += (p['margin'] + pnl)
-                st.session_state.positions = []
-                st.rerun()
-        else:
-            if col_auto1.button("🟢 자동 매매 시작", use_container_width=True):
-                st.session_state.auto_trading = True
-                st.session_state.msg = "🟢 자동 매매가 시작되었습니다."
-                st.session_state.msg_type = "success"
-                st.rerun()
-            col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
+    col_auto1, col_auto2 = st.columns(2)
+    if st.session_state.auto_trading:
+        col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)
+        if col_auto2.button("🔴 자동 매매 종료", use_container_width=True):
+            st.session_state.auto_trading = False
+            st.session_state.msg = "🔴 자동 매매가 종료되었습니다."
+            st.session_state.msg_type = "error"
+            for p in st.session_state.positions:
+                pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
+                if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']
+                st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 자동 종료({p['mode']}): {pnl:+.2f} USDT")
+                st.session_state.balance += (p['margin'] + pnl)
+            st.session_state.positions = []
+            st.rerun()
+    else:
+        if col_auto1.button("🟢 자동 매매 시작", use_container_width=True):
+            st.session_state.auto_trading = True
+            st.session_state.msg = "🟢 자동 매매가 시작되었습니다."
+            st.session_state.msg_type = "success"
+            st.rerun()
+        col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
 
 st.subheader("보유 중인 포지션")
 if not st.session_state.positions:
@@ -201,12 +200,13 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-# [분석 엔진 상태 섹션]
+# [매매 분석 엔진 상태 영역 - 컨테이너 분리]
 with st.container():
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
     st.markdown("<p style='font-size: 22px; font-weight: bold;'>매매 분석 엔진 상태</p>", unsafe_allow_html=True)
     status_col1, status_col2 = st.columns(2)
     status_col1.info("📊 현재 전략: 매물대 분석")
+    
     if st.session_state.positions:
         p = st.session_state.positions[0]
         pnl_val = ((price - p['entry']) if p['type']=='롱' else (p['entry']-price)) / p['entry'] * 100
@@ -215,13 +215,22 @@ with st.container():
     elif total_score >= 25: status_col2.success("🟢 롱 진입 신호: 롱 진입합니다.")
     elif total_score <= -25: status_col2.error("🔴 숏 진입 신호: 숏 진입합니다.")
     else: status_col2.warning("⚪ 신호: 계산 중 (진입 대기)")
+    
     with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
+        st.markdown("<p style='font-size: 20px; font-weight: bold;'>📋 기법별 상세 분석 근거</p>", unsafe_allow_html=True)
+        if total_score > 10: st.markdown("<p style='font-size: 16px; color: green;'>✅ **분석: 지지 구간 강세**</p>", unsafe_allow_html=True)
+        elif total_score < -10: st.markdown("<p style='font-size: 16px; color: red;'>✅ **분석: 저항 구간 강세**</p>", unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size: 16px; color: grey;'>✅ **분석: 중립**</p>", unsafe_allow_html=True)
         for tf, f_score, sup, res in analysis_summary:
-            st.markdown(f"📍 {tf} 차트 (가중 점수: {f_score:.1f})")
+            st.markdown(f"<p style='font-size: 18px; font-weight: bold;'>📍 {tf} 차트 (가중 점수: {f_score:.1f})</p>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
+            c1.markdown("<p style='font-size: 16px;'>🛡️ 지지</p>", unsafe_allow_html=True)
             c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
+            c2.markdown("<p style='font-size: 16px;'>⚔️ 저항</p>", unsafe_allow_html=True)
             c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
+            st.divider()
 
+# [수동 매매 버튼 영역]
 st.divider()
 st.subheader("수동 모드")
 b1, b2, b3 = st.columns(3)
@@ -255,4 +264,3 @@ for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 time.sleep(0.3)
 st.rerun()
-

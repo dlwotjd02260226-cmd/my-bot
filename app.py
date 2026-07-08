@@ -224,7 +224,6 @@ with st.container(border=True):
             st.divider()
 
 st.divider()
-st.subheader("수동 모드")
 b1, b2, b3 = st.columns(3)
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
@@ -252,4 +251,3 @@ for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 time.sleep(0.3)
 st.rerun()
-

@@ -5,7 +5,7 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
 
-# [추가된 매물대 엔진 함수]
+# [매물대 엔진 함수]
 def get_klines(tf='30m', limit=100):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
@@ -48,7 +48,7 @@ st.markdown("""
     .msg-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .msg-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
-""", unsafe_allow_html=True)
+""", unsafe_html=True)
 
 # 세션 상태 초기화
 if 'balance' not in st.session_state:
@@ -161,24 +161,25 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-# 매매 판단 엔진 상태 (추가된 부분)
+# [매매 판단 엔진 상태] - 원본 UI 구조 유지 및 상세 보기 통합
 st.subheader("매매 분석 엔진 상태")
-tf = '30m'
-df_30m = get_klines(tf)
-if df_30m is not None:
-    score, supports, resistances = calculate_sr_score(price, df_30m)
-    # 신호가 있을 때만 상세 표시
-    if abs(score) >= 3:
-        action = "롱(Long) 진입" if score >= 3 else "숏(Short) 진입"
-        with st.expander(f"📍 [{tf}] 조건 성립: {action}", expanded=True):
-            st.markdown(f"**이유:** 매물대 지지/저항 분석 결과 ({score}점)")
-            c1, c2 = st.columns(2)
-            c1.write("🛡️ 지지대"); c1.table(pd.DataFrame(supports[-3:], columns=["Price"]))
-            c2.write("⚔️ 저항대"); c2.table(pd.DataFrame(resistances[-3:], columns=["Price"]))
-    else:
-        st.info(f"⚪ [{tf}] 전략: 대기중 (조건 미성립)")
-else:
-    st.write("데이터 수집 중...")
+df_30m = get_klines('30m')
+sr_score, supports, resistances = calculate_sr_score(price, df_30m) if df_30m is not None else (0, [], [])
+status_col1, status_col2 = st.columns(2)
+status_col1.info(f"📊 현재 전략: 매물대 분석({sr_score}점)")
+status_col2.warning(f"⚪ 신호: {'🟢 롱 진입' if sr_score >= 3 else ('🔴 숏 진입' if sr_score <= -3 else '대기 중')}")
+
+with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
+    st.markdown(f"""
+    * 1. 지지/저항 돌파: <span style="color: {'green' if abs(sr_score) >= 3 else 'gray'}">{sr_score}점 (분석 완료)</span>
+    * 2. 거래량 분석: <span style="color: gray;">대기 중</span>
+    * 3. 고래 체결량: <span style="color: gray;">데이터 수집 전</span>
+    * 4. 다이버전스: <span style="color: gray;">데이터 수집 전</span>
+    <hr>
+    📍 주요 매물대(30분봉): 
+    - 지지: {[round(x, 2) for x in supports[-3:]]}
+    - 저항: {[round(x, 2) for x in resistances[-3:]]}
+    """)
 
 st.divider()
 

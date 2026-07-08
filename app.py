@@ -174,7 +174,11 @@ with st.container(border=True):
     st.markdown("<p style='font-size: 22px; font-weight: bold;'>매매 분석 엔진 상태</p>", unsafe_allow_html=True)
     status_col1, status_col2 = st.columns(2)
     status_col1.info("📊 현재 전략: 매물대 분석")
-    status_col2.warning("⚪ 신호: 계산 중")
+    
+    # 신호 표시
+    if total_score >= 25: status_col2.success("🟢 신호: 롱 진입")
+    elif total_score <= -25: status_col2.error("🔴 신호: 숏 진입")
+    else: status_col2.warning("⚪ 신호: 계산 중")
     
     with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
         st.markdown("<p style='font-size: 20px; font-weight: bold;'>📋 기법별 상세 분석 근거</p>", unsafe_allow_html=True)
@@ -182,11 +186,6 @@ with st.container(border=True):
         elif total_score < -10: st.markdown("<p style='font-size: 16px; color: red;'>✅ **분석: 저항 구간 강세** - 종합 점수가 저항 우위를 가리킵니다.</p>", unsafe_allow_html=True)
         else: st.markdown("<p style='font-size: 16px; color: grey;'>✅ **분석: 중립** - 방향성 확인 필요.</p>", unsafe_allow_html=True)
         
-        st.markdown("<p style='font-size: 20px; font-weight: bold;'>💡 최종 행동 가이드</p>", unsafe_allow_html=True)
-        if total_score >= 25: st.markdown("<p style='font-size: 16px;'>👉 **롱 진입:** 종합 점수가 매우 강한 롱을 가리킵니다. 조건 충족 시 진입합니다.</p>", unsafe_allow_html=True)
-        elif total_score <= -25: st.markdown("<p style='font-size: 16px;'>👉 **숏 진입:** 종합 점수가 매우 강한 숏을 가리킵니다. 조건 충족 시 진입합니다.</p>", unsafe_allow_html=True)
-        else: st.markdown("<p style='font-size: 16px;'>👉 **모니터링:** 최적의 타점을 위해 신호를 실시간으로 계산하고 있습니다.</p>", unsafe_allow_html=True)
-
         for tf, f_score, sup, res in analysis_summary:
             st.markdown(f"<p style='font-size: 18px; font-weight: bold;'>📍 {tf} 차트 (가중 점수: {f_score:.1f})</p>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)

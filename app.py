@@ -168,32 +168,35 @@ decision = "⚪ 시장 관망"
 if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
 elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
 
-# [1. 종합 매물대 점수 칸 (포지션 아래 독립 박스)]
+# [1. 종합 매매 점수 칸 (포지션 아래 독립 박스)]
 with st.container(border=True):
-    st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
+    st.markdown(f"### 📊 종합 매매 점수: {total_score:.1f}점")
     st.warning(f"⚪ 신호: {decision}")
+
+# [2. 매매 분석 엔진 상태 칸 (상세 분석 펼치기 이동)]
+with st.container(border=True):
+    st.subheader("매매 분석 엔진 상태")
+    status_col1, status_col2 = st.columns(2)
+    status_col1.info("📊 현재 전략: 매물대 분석")
+    status_col2.warning("⚪ 신호: 계산 중")
+    
     with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
         st.markdown("### 📋 기법별 상세 분석 근거")
-        if total_score > 10: st.success("✅ **매물대: 지지 구간 강세** - 가격이 주요 지지 매물대 위에 안착하여 롱 진입 유리.")
-        elif total_score < -10: st.error("✅ **매물대: 저항 구간 강세** - 가격이 주요 저항 매물대에 도달하여 숏 진입 유리.")
-        else: st.info("✅ **매물대: 중립** - 방향성 확인 필요.")
+        if total_score > 10: st.success("✅ **분석: 지지 구간 강세** - 종합 점수가 지지 우위를 가리킵니다.")
+        elif total_score < -10: st.error("✅ **분석: 저항 구간 강세** - 종합 점수가 저항 우위를 가리킵니다.")
+        else: st.info("✅ **분석: 중립** - 방향성 확인 필요.")
+        
         st.markdown("### 💡 최종 행동 가이드")
-        if total_score >= 25: st.write("👉 **롱 진입:** 매물대 지지력이 매우 강합니다. 분할 매수 대응.")
-        elif total_score <= -25: st.write("👉 **숏 진입:** 매물대 저항력이 매우 강합니다. 매도 관점 접근.")
+        if total_score >= 25: st.write("👉 **롱 진입:** 종합 점수가 매우 강한 롱을 가리킵니다.")
+        elif total_score <= -25: st.write("👉 **숏 진입:** 종합 점수가 매우 강한 숏을 가리킵니다.")
         else: st.write("👉 **관망:** 신호를 기다리세요.")
+
         for tf, f_score, sup, res in analysis_summary:
             st.markdown(f"**📍 {tf} 차트 (가중 점수: {f_score:.1f})**")
             c1, c2 = st.columns(2)
             c1.write("🛡️ 지지"); c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
             c2.write("⚔️ 저항"); c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
             st.divider()
-
-# [2. 매매 분석 엔진 상태 칸 (별도 독립 박스)]
-with st.container(border=True):
-    st.subheader("매매 분석 엔진 상태")
-    status_col1, status_col2 = st.columns(2)
-    status_col1.info("📊 현재 전략: 매물대 분석")
-    status_col2.warning("⚪ 신호: 계산 중")
 
 st.divider()
 

@@ -159,39 +159,50 @@ status_col1.info("📊 현재 전략: 매물대 분석")
 status_col2.warning("⚪ 신호: 계산 중")
 
 with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
-    # [지능형 엔진: 매물대 가중치 분석 시작]
+    # [상세 매매 가이드 엔진]
     time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
     total_score = 0
+    all_s, all_r = [], []
     analysis_summary = []
-    strategy_tier = 1.5 
 
     for tf, t_weight in time_weights.items():
         df = get_klines(tf)
         if df is not None and not df.empty:
             score, supports, resistances = calculate_sr_score(price, df)
-            final_score = score * strategy_tier * t_weight
-            total_score += final_score
-            analysis_summary.append((tf, final_score, supports, resistances))
+            total_score += (score * 1.5 * t_weight)
+            all_s.extend(supports)
+            all_r.extend(resistances)
+            analysis_summary.append((tf, score * 1.5 * t_weight, supports, resistances))
 
-    decision = "⚪ 시장 관망"
-    if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
-    elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
+    # 가장 가까운 지지/저항선 찾기
+    n_s = max([s for s in all_s if s < price], default=0)
+    n_r = min([r for r in all_r if r > price], default=999999)
 
-    st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
-    st.warning(f"⚪ 신호: {decision}")
-    
-    # [상세 분석 대시보드 추가]
+    st.markdown("### 🤖 상세 매매 판단 근거")
+    # 보유 포지션에 따른 상세 이유 설명
+    for p in st.session_state.positions:
+        if p['type'] == '롱':
+            if abs(price - n_r)/price < 0.003: 
+                st.warning(f"✅ **[익절 제안]** 현재가 {price:.2f}가 저항선 {n_r:.2f}에 도달했습니다. 저항 매물대로 인해 추가 상승이 제한될 수 있으므로 수익을 실현하십시오.")
+            if abs(price - n_s)/price < 0.003: 
+                st.error(f"❌ **[손절 제안]** 현재가 {price:.2f}가 지지선 {n_s:.2f}를 위협합니다. 지지 실패 시 추가 하락이 예상되니 손절로 리스크를 관리하세요.")
+        else: # 숏
+            if abs(price - n_s)/price < 0.003: 
+                st.warning(f"✅ **[익절 제안]** 현재가 {price:.2f}가 지지선 {n_s:.2f}에 도달했습니다. 지지 반등 가능성이 높으니 수익을 확보하십시오.")
+            if abs(price - n_r)/price < 0.003: 
+                st.error(f"❌ **[손절 제안]** 현재가 {price:.2f}가 저항선 {n_r:.2f}를 돌파했습니다. 저항선 돌파는 상승 추세 시작을 의미하므로 손절이 필요합니다.")
+
+    # 신규 진입 근거
+    st.markdown("### 💡 진입/관망 근거")
+    if total_score >= 25:
+        st.success(f"🟢 **[롱 진입 근거]** 현재 가격이 {n_s:.2f}(지지) 근처에서 안정적인 흐름을 보이고 있습니다. 반등을 기대하고 롱 포지션을 진입하십시오.")
+    elif total_score <= -25:
+        st.error(f"🔴 **[숏 진입 근거]** 현재 가격이 {n_r:.2f}(저항)를 넘지 못하고 있습니다. 강력한 매도 매물대 근처이므로 숏 진입을 권장합니다.")
+    else:
+        st.info(f"⚪ **[관망 근거]** 현재 가격 {price:.2f}가 지지선({n_s:.2f})과 저항선({n_r:.2f}) 사이에 갇혀 있습니다. 방향성이 명확해질 때까지 관망하십시오.")
+
     st.markdown("---")
-    st.markdown("### 📋 기법별 상세 분석 근거")
-    if total_score > 10: st.success("✅ **매물대: 지지 구간 강세** - 가격이 주요 지지 매물대 위에 안착하여 롱 진입 유리.")
-    elif total_score < -10: st.error("✅ **매물대: 저항 구간 강세** - 가격이 주요 저항 매물대에 도달하여 숏 진입 유리.")
-    else: st.info("✅ **매물대: 중립** - 방향성 확인 필요.")
-    
-    st.markdown("### 💡 최종 행동 가이드")
-    if total_score >= 25: st.write("👉 **롱 진입:** 매물대 지지력이 매우 강합니다. 분할 매수 대응.")
-    elif total_score <= -25: st.write("👉 **숏 진입:** 매물대 저항력이 매우 강합니다. 매도 관점 접근.")
-    else: st.write("👉 **관망:** 신호를 기다리세요.")
-
+    st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
     for tf, f_score, sup, res in analysis_summary:
         st.markdown(f"**📍 {tf} 차트 (가중 점수: {f_score:.1f})**")
         c1, c2 = st.columns(2)

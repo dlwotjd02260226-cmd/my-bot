@@ -1,33 +1,9 @@
+
 import streamlit as st
 import requests
 import time
 from datetime import datetime
 import streamlit.components.v1 as components
-import pandas as pd
-
-# [매물대 엔진 함수]
-def get_klines(tf='30m', limit=100):
-    url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
-    try:
-        r = requests.get(url, timeout=2)
-        data = r.json()['data']
-        if not data: return None
-        df = pd.DataFrame(data, columns=['ts', 'o', 'h', 'l', 'close', 'vol', 'confirm'])
-        df['close'] = df['close'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
-        return df.iloc[::-1].reset_index(drop=True)
-    except: return None
-
-def calculate_sr_score(price, df):
-    supports = [df['low'].iloc[i] for i in range(5, len(df)-5) if df['low'].iloc[i] < df['low'].iloc[i-5:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+6].min()]
-    resistances = [df['high'].iloc[i] for i in range(5, len(df)-5) if df['high'].iloc[i] > df['high'].iloc[i-5:i].max() and df['high'].iloc[i] > df['high'].iloc[i+1:i+6].max()]
-    score = 0
-    for s in supports[-3:]:
-        if abs(price - s) / price < 0.005: score += 3
-    for r in resistances[-3:]:
-        if abs(price - r) / price < 0.005: score -= 3
-    return score, supports, resistances
 
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
@@ -48,7 +24,7 @@ st.markdown("""
     .msg-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .msg-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
-""", unsafe_html=True)
+""", unsafe_allow_html=True)
 
 # 세션 상태 초기화
 if 'balance' not in st.session_state:
@@ -161,43 +137,30 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-# [매매 판단 엔진 상태] - 원본 UI 구조 유지 및 상세 보기 통합
+# 매매 판단 엔진 상태
 st.subheader("매매 분석 엔진 상태")
-df_30m = get_klines('30m')
-sr_score, supports, resistances = calculate_sr_score(price, df_30m) if df_30m is not None else (0, [], [])
 status_col1, status_col2 = st.columns(2)
-status_col1.info(f"📊 현재 전략: 매물대 분석({sr_score}점)")
-status_col2.warning(f"⚪ 신호: {'🟢 롱 진입' if sr_score >= 3 else ('🔴 숏 진입' if sr_score <= -3 else '대기 중')}")
-
+status_col1.info("📊 현재 전략: 대기중")
+status_col2.warning("⚪ 신호: 신호 없음")
 with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
-    st.markdown(f"""
-        # [지능형 엔진: 매물대 가중치 분석 시작]
-    # 1시간 이상 타임프레임 및 가중치 설정
+    # [지능형 엔진: 매물대 가중치 분석 시작]
     time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
     total_score = 0
     analysis_summary = []
-    
-    # 봇이 판단하는 기법 티어 (매물대 기본값 1.5)
     strategy_tier = 1.5 
 
     for tf, t_weight in time_weights.items():
-        # 데이터 가져오기 (기존 get_klines 함수 사용)
         df = get_klines(tf)
         if df is not None and not df.empty:
-            # 매물대 점수 계산 (기존 calculate_sr_score 함수 사용)
             score, supports, resistances = calculate_sr_score(price, df)
-            
-            # 가중치 합산: (기법 티어 * 시간대 가중치 * 매물대 점수)
             final_score = score * strategy_tier * t_weight
             total_score += final_score
             analysis_summary.append((tf, final_score, supports, resistances))
 
-    # 종합 점수에 따른 신호 판단
     decision = "⚪ 시장 관망"
     if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
     elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
 
-    # UI 업데이트
     st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
     st.warning(f"⚪ 신호: {decision}")
 
@@ -207,7 +170,6 @@ with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
         c1.write("🛡️ 지지"); c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
         c2.write("⚔️ 저항"); c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
         st.divider()
-
 st.divider()
 
 # 매매 버튼
@@ -260,3 +222,5 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
+st.rerun()
+

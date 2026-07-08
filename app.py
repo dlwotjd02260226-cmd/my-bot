@@ -229,22 +229,30 @@ if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
+        st.session_state.msg = "📈 롱 포지션 진입 성공"
+        st.session_state.msg_type = "success"
         st.rerun()
 if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
+        st.session_state.msg = "📉 숏 포지션 진입 성공"
+        st.session_state.msg_type = "success"
         st.rerun()
 if b3.button("❌ 전체 포지션 종료", use_container_width=True):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
+    st.session_state.msg = "🛑 모든 포지션이 종료되었습니다."
+    st.session_state.msg_type = "error"
     st.rerun()
 if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.balance = 10000.0
     st.session_state.positions = []
     st.session_state.logs = []
+    st.session_state.msg = "🔄 가상 머니가 초기화되었습니다."
+    st.session_state.msg_type = "success"
     st.rerun()
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):

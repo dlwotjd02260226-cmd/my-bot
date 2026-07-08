@@ -149,9 +149,9 @@ for p in st.session_state.positions[:]:
         if pnl_val > 0: st.session_state.wins_total += pnl_val
         else: st.session_state.losses_total += abs(pnl_val)
         
-        reason = f"{action}가 충족되어 포지션 정리"
         log_type = "자동" if st.session_state.auto_trading else "수동"
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}배팅 | {p['type']} 포지션 {reason} ({pnl_val:+.2f} USDT)")
+        # 상세 로그 기록
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 진입가: {p['entry']:.2f} | 수익: {pnl_val:+.2f} USDT")
         
         st.session_state.balance += (p['margin'] + pnl_val)
         st.session_state.positions.remove(p)
@@ -183,17 +183,19 @@ with st.container(border=True):
         if col_auto2.button("🔴 자동 매매 종료", use_container_width=True):
             st.session_state.auto_trading = False
             set_msg("자동 매매가 종료되었습니다.")
+            st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 자동매매 | 자동 매매 모드 종료")
             for p in st.session_state.positions:
                 pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
                 if pnl > 0: st.session_state.wins_total += pnl
                 else: st.session_state.losses_total += abs(pnl)
-                st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 자동배팅 | {p['type']} 포지션 강제종료 ({pnl:+.2f} USDT)")
+                st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 자동매매 | {p['type']} 포지션 강제종료 | 수익: {pnl:+.2f} USDT")
                 st.session_state.balance += (p['margin'] + pnl)
             st.session_state.positions = []
             st.rerun()
     else:
         if col_auto1.button("🟢 자동 매매 시작", use_container_width=True):
             st.session_state.auto_trading = True
+            st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 시스템 | 자동 매매를 시작했습니다.")
             set_msg("자동 매매가 시작되었습니다.")
             st.rerun()
         col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
@@ -221,7 +223,7 @@ else:
             if st.button("종료 X", key=f"close_{i}"):
                 if pnl > 0: st.session_state.wins_total += pnl
                 else: st.session_state.losses_total += abs(pnl)
-                st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | {p['type']} 포지션 정리 ({pnl:+.2f} USDT)")
+                st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동매매 | {p['type']} 포지션 수동 종료 | 수익: {pnl:+.2f} USDT")
                 st.session_state.balance += (p['margin'] + pnl)
                 st.session_state.positions.pop(i)
                 set_msg(f"{p['type']} 포지션 정리 완료")
@@ -273,7 +275,7 @@ if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동 롱 진입")
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동매매 | 롱 진입 | 진입가: {price:.2f}")
         set_msg("수동 롱 진입 완료")
         st.rerun()
     else: set_msg("잔액 부족")
@@ -281,7 +283,7 @@ if b2.button("숏 진입", use_container_width=True):
     if amt <= st.session_state.balance:
         st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
         st.session_state.balance -= amt
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동 숏 진입")
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동매매 | 숏 진입 | 진입가: {price:.2f}")
         set_msg("수동 숏 진입 완료")
         st.rerun()
     else: set_msg("잔액 부족")
@@ -290,6 +292,7 @@ if b3.button("❌ 전체 종료", use_container_width=True):
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         if pnl > 0: st.session_state.wins_total += pnl
         else: st.session_state.losses_total += abs(pnl)
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동매매 | 전체 포지션 강제종료 | 수익: {pnl:+.2f} USDT")
     st.session_state.positions = []
     set_msg("전체 포지션 종료")
     st.rerun()
@@ -299,10 +302,12 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
     st.session_state.logs = []
     st.session_state.wins_total = 0.0
     st.session_state.losses_total = 0.0
+    st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 시스템 | 가상머니 초기화 완료")
     set_msg("초기화 완료")
     st.rerun()
 
 st.subheader("거래 로그")
-for log in reversed(st.session_state.logs[-10:]): st.text(log)
+for log in reversed(st.session_state.logs[-15:]): st.text(log)
 time.sleep(0.3)
 st.rerun()
+

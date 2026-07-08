@@ -37,14 +37,28 @@ def calculate_sr_score(price, df):
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
-# CSS: 메시지 영역 및 스타일
+# [중앙 알림 기능 구현]
+if 'msg_trigger' not in st.session_state: st.session_state.msg_trigger = None
+
 st.markdown("""
     <style>
     .fixed-msg-area { height: 70px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; border-radius: 5px; font-weight: bold; width: 100%; }
     .msg-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .msg-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    
+    .toast-overlay {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        z-index: 9999; padding: 20px 40px; border-radius: 10px; font-size: 20px; font-weight: bold;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3); background: white; border: 2px solid #333;
+    }
     </style>
 """, unsafe_allow_html=True)
+
+if st.session_state.msg_trigger:
+    st.markdown(f'<div class="toast-overlay">{st.session_state.msg_trigger}</div>', unsafe_allow_html=True)
+    time.sleep(1.5)
+    st.session_state.msg_trigger = None
+    st.rerun()
 
 # 세션 상태 초기화
 if 'balance' not in st.session_state:
@@ -62,6 +76,7 @@ if 'balance' not in st.session_state:
 def set_msg(txt, mtype="success"):
     st.session_state.msg = txt
     st.session_state.msg_type = mtype
+    st.session_state.msg_trigger = txt
 
 # 시세 가져오기 함수
 def get_price():
@@ -243,13 +258,11 @@ st.subheader("매매 분석 엔진")
 with st.container(border=True):
     st.info("📊 현재 전략: 매물대 분석")
     with st.expander("🔍 매매 분석 상세 보기 (펼치기)", expanded=True):
-        # 전략 데이터 (나중에 수십 개로 확장 가능)
         strategies = [
             {"name": "강력한 지지선 반등", "score": 15, "condition": lambda p, s, r: any(abs(p - sup) / p < 0.005 for sup in s), "desc": "강력한 지지선 근접으로 롱 진입 근거 확보."},
             {"name": "저항선 돌파 실패", "score": -10, "condition": lambda p, s, r: any(abs(p - res) / p < 0.005 for res in r), "desc": "저항선 근접 및 돌파 실패로 숏 진입 근거 확보."}
         ]
         
-        # 활성화된 전략만 필터링
         active_strategies = []
         for tf, f_score, sup, res, log in analysis_summary:
             for strat in strategies:
@@ -314,3 +327,4 @@ for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 time.sleep(0.3)
 st.rerun()
+

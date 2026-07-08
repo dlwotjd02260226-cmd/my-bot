@@ -133,9 +133,11 @@ for p in st.session_state.positions[:]:
         st.session_state.positions.remove(p)
         st.rerun()
 
+# [수정된 핵심 자산 계산 로직]
+# 총자산 = 가용 잔고 + 미실현 손익
+# (포지션 증거금은 이미 잔고에서 차감된 상태이므로 다시 더하지 않아야 자산이 정확합니다)
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
-total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
-current_total_asset = st.session_state.balance + total_margin_in_pos + total_pos_pnl
+current_total_asset = st.session_state.balance + total_pos_pnl
 
 st.metric("실시간 총 자산 (USDT)", f"{current_total_asset:,.2f}")
 st.metric("현재 변동 금액 (USDT)", f"{total_pos_pnl:+.2f} USDT")
@@ -193,7 +195,7 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-# 매매 분석 엔진 (생략 없이 원본 유지)
+# 매매 분석 엔진
 with st.container(border=True):
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
     st.markdown("<p style='font-size: 22px; font-weight: bold;'>매매 분석 엔진 상태</p>", unsafe_allow_html=True)

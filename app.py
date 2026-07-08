@@ -247,6 +247,7 @@ with st.container(border=True):
             st.divider()
 
 st.divider()
+st.subheader("수동 매매 버튼")
 b1, b2, b3 = st.columns(3)
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:

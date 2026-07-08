@@ -64,9 +64,7 @@ price = get_price()
 # 제목
 st.markdown("<div style='font-size: 42px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
 
-# ==============================================================================
 # [위치 조정된 설정 UI 영역]
-# ==============================================================================
 col_mode1, col_mode2 = st.columns(2)
 with col_mode1:
     mode_real = st.radio("매매 모드", ["가상 매매", "실전 매매"], key="is_real", horizontal=True)
@@ -91,7 +89,6 @@ col1, col2 = st.columns(2)
 lev = col1.number_input("레버리지 (1~125)", min_value=1, max_value=125, value=10)
 amt = col2.number_input("배팅 금액(USDT)", value=100.0)
 st.divider()
-# ==============================================================================
 
 # 차트 표시
 components.html("""
@@ -145,37 +142,39 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-msg_placeholder = st.empty()
-if st.session_state.msg:
-    c_class = "msg-success" if st.session_state.msg_type == "success" else "msg-error"
-    msg_placeholder.markdown(f'<div class="fixed-msg-area {c_class}">{st.session_state.msg}</div>', unsafe_allow_html=True)
-    time.sleep(1)
-    st.session_state.msg = None
-    st.rerun()
-else:
-    msg_placeholder.markdown('<div class="fixed-msg-area" style="background-color: transparent;"></div>', unsafe_allow_html=True)
+# [테두리가 추가된 자동 매매 제어 영역]
+with st.container(border=True):
+    msg_placeholder = st.empty()
+    if st.session_state.msg:
+        c_class = "msg-success" if st.session_state.msg_type == "success" else "msg-error"
+        msg_placeholder.markdown(f'<div class="fixed-msg-area {c_class}">{st.session_state.msg}</div>', unsafe_allow_html=True)
+        time.sleep(1)
+        st.session_state.msg = None
+        st.rerun()
+    else:
+        msg_placeholder.markdown('<div class="fixed-msg-area" style="background-color: transparent;"></div>', unsafe_allow_html=True)
 
-col_auto1, col_auto2 = st.columns(2)
-if st.session_state.auto_trading:
-    col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)
-    if col_auto2.button("🔴 자동 매매 종료", use_container_width=True):
-        st.session_state.auto_trading = False
-        st.session_state.msg = "🔴 자동 매매가 종료되었습니다."
-        st.session_state.msg_type = "error"
-        for p in st.session_state.positions:
-            pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-            if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']
-            st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 자동 종료({p['mode']}): {pnl:+.2f} USDT")
-            st.session_state.balance += (p['margin'] + pnl)
-        st.session_state.positions = []
-        st.rerun()
-else:
-    if col_auto1.button("🟢 자동 매매 시작", use_container_width=True):
-        st.session_state.auto_trading = True
-        st.session_state.msg = "🟢 자동 매매가 시작되었습니다."
-        st.session_state.msg_type = "success"
-        st.rerun()
-    col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
+    col_auto1, col_auto2 = st.columns(2)
+    if st.session_state.auto_trading:
+        col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)
+        if col_auto2.button("🔴 자동 매매 종료", use_container_width=True):
+            st.session_state.auto_trading = False
+            st.session_state.msg = "🔴 자동 매매가 종료되었습니다."
+            st.session_state.msg_type = "error"
+            for p in st.session_state.positions:
+                pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
+                if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']
+                st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 자동 종료({p['mode']}): {pnl:+.2f} USDT")
+                st.session_state.balance += (p['margin'] + pnl)
+            st.session_state.positions = []
+            st.rerun()
+    else:
+        if col_auto1.button("🟢 자동 매매 시작", use_container_width=True):
+            st.session_state.auto_trading = True
+            st.session_state.msg = "🟢 자동 매매가 시작되었습니다."
+            st.session_state.msg_type = "success"
+            st.rerun()
+        col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
 
 st.subheader("보유 중인 포지션")
 if not st.session_state.positions:

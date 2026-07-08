@@ -49,6 +49,7 @@ if 'balance' not in st.session_state:
     st.session_state.auto_trading = False
     st.session_state.msg = None
     st.session_state.msg_type = None
+    st.session_state.mode = "수동" # 오토/수동 구분
 
 # 시세 가져오기 함수
 def get_price():
@@ -62,6 +63,19 @@ price = get_price()
 
 # 제목
 st.markdown("<div style='font-size: 42px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
+
+# [추가] 매매 손익 관리 설정 UI
+st.subheader("매매 손익 관리 설정")
+col_mode_btn1, col_mode_btn2 = st.columns(2)
+if col_mode_btn1.button("🤖 오토 모드 전환"): st.session_state.mode = "오토"
+if col_mode_btn2.button("✋ 수동 모드 전환"): st.session_state.mode = "수동"
+
+st.write(f"현재 운영 모드: **{st.session_state.mode} 모드**")
+
+col_set1, col_set2 = st.columns(2)
+is_auto = (st.session_state.mode == "오토")
+tp_input = col_set1.number_input("익절 (%)", value=2.0, disabled=is_auto)
+sl_input = col_set2.number_input("손절 (%)", value=1.0, disabled=is_auto)
 
 # 실전/가상 매매 및 교차/격리 모드 선택
 col_mode1, col_mode2 = st.columns(2)
@@ -80,6 +94,38 @@ components.html("""
 <script src="https://s3.tradingview.com/tv.js"></script>
 <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
+
+# [계산 로직 사전 실행]
+time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
+total_score = 0
+analysis_summary = []
+strategy_tier = 1.5 
+for tf, t_weight in time_weights.items():
+    df = get_klines(tf)
+    if df is not None and not df.empty:
+        score, supports, resistances = calculate_sr_score(price, df)
+        final_score = score * strategy_tier * t_weight
+        total_score += final_score
+        analysis_summary.append((tf, final_score, supports, resistances))
+
+# [추가/수정] 자동 청산 로직 (오토/수동 판단)
+for p in st.session_state.positions[:]:
+    pnl_pct = ((price - p['entry']) if p['type']=='롱' else (p['entry']-price)) / p['entry'] * 100 * p['lev']
+    
+    # 수동이면 입력값, 오토면 프로그램이 판단(점수 비례 TP 확장)
+    if st.session_state.mode == "수동":
+        target_tp, target_sl = tp_input, sl_input
+    else:
+        target_tp = 3.5 + (max(0, abs(total_score) - 25) / 10) 
+        target_sl = 1.5
+    
+    if pnl_pct >= target_tp or pnl_pct <= -target_sl:
+        action = "익절" if pnl_pct > 0 else "손절"
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} {st.session_state.mode} {action}({pnl_pct:.2f}%)")
+        pnl_val = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
+        st.session_state.balance += (p['margin'] + pnl_val)
+        st.session_state.positions.remove(p)
+        st.rerun()
 
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
 total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
@@ -151,19 +197,6 @@ else:
         </div>
         </div>
         """, unsafe_allow_html=True)
-
-# [계산 로직 사전 실행]
-time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
-total_score = 0
-analysis_summary = []
-strategy_tier = 1.5 
-for tf, t_weight in time_weights.items():
-    df = get_klines(tf)
-    if df is not None and not df.empty:
-        score, supports, resistances = calculate_sr_score(price, df)
-        final_score = score * strategy_tier * t_weight
-        total_score += final_score
-        analysis_summary.append((tf, final_score, supports, resistances))
 
 # [1. 종합 매매 점수 칸]
 with st.container(border=True):

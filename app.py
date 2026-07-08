@@ -20,6 +20,7 @@ def get_klines(tf='1h', limit=50):
     except: return None
 
 def calculate_sr_score(price, df):
+    if df is None or len(df) < 10: return 0, [], []
     supports = [df['low'].iloc[i] for i in range(5, len(df)-5) if df['low'].iloc[i] < df['low'].iloc[i-5:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+6].min()]
     resistances = [df['high'].iloc[i] for i in range(5, len(df)-5) if df['high'].iloc[i] > df['high'].iloc[i-5:i].max() and df['high'].iloc[i] > df['high'].iloc[i+1:i+6].max()]
     score = 0
@@ -69,10 +70,10 @@ def get_price():
 
 price = get_price()
 
-# 제목 글자 크기 조절
+# 제목
 st.markdown("<div style='font-size: 42px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
 
-# 실전/가상 매매 및 교차/격리 모드 선택
+# 모드 선택
 col_mode1, col_mode2 = st.columns(2)
 with col_mode1:
     mode_real = st.radio("매매 모드", ["가상 매매", "실전 매매"], key="is_real", horizontal=True)
@@ -121,30 +122,23 @@ if st.session_state.msg:
 else:
     msg_placeholder.markdown('<div class="fixed-msg-area" style="background-color: transparent;"></div>', unsafe_allow_html=True)
 
-# 자동 매매 섹션
+# 자동 매매
 col_auto1, col_auto2 = st.columns(2)
 if st.session_state.auto_trading:
     col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)
     if col_auto2.button("🔴 자동 매매 종료", use_container_width=True):
         st.session_state.auto_trading = False
-        st.session_state.msg = "🔴 자동 매매가 종료되었습니다."
-        st.session_state.msg_type = "error"
         for p in st.session_state.positions:
             pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-            if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']
-            st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 자동 종료({p['mode']}): {pnl:+.2f} USDT")
             st.session_state.balance += (p['margin'] + pnl)
         st.session_state.positions = []
         st.rerun()
 else:
     if col_auto1.button("🟢 자동 매매 시작", use_container_width=True):
         st.session_state.auto_trading = True
-        st.session_state.msg = "🟢 자동 매매가 시작되었습니다."
-        st.session_state.msg_type = "success"
         st.rerun()
     col_auto2.button("🔴 자동 매매 종료", disabled=True, use_container_width=True)
 
-# 보유 중인 포지션
 st.subheader("보유 중인 포지션")
 if not st.session_state.positions:
     st.write("보유 포지션 없음")
@@ -161,19 +155,17 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-# 매매 판단 엔진 상태
+# 매매 판단 엔진
 st.subheader("매매 분석 엔진 상태")
 status_col1, status_col2 = st.columns(2)
 status_col1.info("📊 현재 전략: 매물대 분석")
 status_col2.warning("⚪ 신호: 계산 중")
 
 with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
-    # [지능형 엔진: 매물대 가중치 분석 시작]
     time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
     total_score = 0
     analysis_summary = []
     strategy_tier = 1.5 
-
     for tf, t_weight in time_weights.items():
         df = get_klines(tf)
         if df is not None and not df.empty:
@@ -181,87 +173,52 @@ with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
             final_score = score * strategy_tier * t_weight
             total_score += final_score
             analysis_summary.append((tf, final_score, supports, resistances))
-
-    # 가장 가까운 지지/저항 계산
+    
     all_sups = sorted([s for _, _, sup, _ in analysis_summary for s in sup if s < price], reverse=True)
     all_res = sorted([r for _, _, _, res in analysis_summary for r in res if r > price])
     nearest_sup = all_sups[0] if all_sups else 0
     nearest_res = all_res[0] if all_res else 999999
-
-    # [봇의 실시간 대응 가이드 추가]
+    
     st.markdown("### 🤖 실시간 대응 가이드")
     for p in st.session_state.positions:
         if p['type'] == '롱':
-            if abs(price - nearest_res) / price < 0.003: st.warning(f"⚠️ **[롱 포지션]** 저항선({nearest_res:.2f}) 도달! 익절 혹은 부분 매도를 강력 추천합니다.")
-            if abs(price - nearest_sup) / price < 0.003: st.error(f"⚠️ **[롱 포지션]** 지지선({nearest_sup:.2f}) 위협! 손절을 고려하세요.")
-        else: # 숏 포지션
-            if abs(price - nearest_sup) / price < 0.003: st.warning(f"⚠️ **[숏 포지션]** 지지선({nearest_sup:.2f}) 도달! 익절 혹은 부분 매도를 강력 추천합니다.")
-            if abs(price - nearest_res) / price < 0.003: st.error(f"⚠️ **[숏 포지션]** 저항선({nearest_res:.2f}) 돌파! 손절 대응 필요.")
-
+            if abs(price - nearest_res) / price < 0.003: st.warning(f"⚠️ [롱] 저항선({nearest_res:.2f}) 도달! 익절 추천.")
+            if abs(price - nearest_sup) / price < 0.003: st.error(f"⚠️ [롱] 지지선({nearest_sup:.2f}) 위협! 손절 추천.")
+        else:
+            if abs(price - nearest_sup) / price < 0.003: st.warning(f"⚠️ [숏] 지지선({nearest_sup:.2f}) 도달! 익절 추천.")
+            if abs(price - nearest_res) / price < 0.003: st.error(f"⚠️ [숏] 저항선({nearest_res:.2f}) 돌파! 손절 추천.")
+    
     decision = "⚪ 시장 관망"
     if total_score >= 25: decision = f"🟢 강력한 롱 진입 구간 ({nearest_sup:.2f} 지지)"
     elif total_score <= -25: decision = f"🔴 강력한 숏 진입 구간 ({nearest_res:.2f} 저항)"
     
-    st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
-    st.warning(f"⚪ 신호: {decision}")
-
+    st.markdown(f"### 📊 종합 점수: {total_score:.1f}점")
+    st.warning(decision)
     for tf, f_score, sup, res in analysis_summary:
-        st.markdown(f"**📍 {tf} 차트 (가중 점수: {f_score:.1f})**")
+        st.markdown(f"**📍 {tf} (점수: {f_score:.1f})**")
         c1, c2 = st.columns(2)
-        c1.write("🛡️ 지지"); c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
-        c2.write("⚔️ 저항"); c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
+        c1.write("🛡️ 지지"); c1.table(pd.DataFrame(sup[-3:], columns=["Price"])) if sup else c1.write("-")
+        c2.write("⚔️ 저항"); c2.table(pd.DataFrame(res[-3:], columns=["Price"])) if res else c2.write("-")
         st.divider()
 
 st.divider()
-
-# 매매 버튼
 b1, b2, b3 = st.columns(3)
-if b1.button("롱 진입", use_container_width=True):
-    if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
-        st.session_state.balance -= amt
-        st.session_state.msg = "🟢 롱 포지션 진입 완료!"
-        st.session_state.msg_type = "success"
-        st.rerun()
-    else:
-        st.session_state.msg = "❌ 잔고 부족!"
-        st.session_state.msg_type = "error"
-        st.rerun()
-
-if b2.button("숏 진입", use_container_width=True):
-    if amt <= st.session_state.balance:
-        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
-        st.session_state.balance -= amt
-        st.session_state.msg = "🔴 숏 포지션 진입 완료!"
-        st.session_state.msg_type = "error"
-        st.rerun()
-    else:
-        st.session_state.msg = "❌ 잔고 부족!"
-        st.session_state.msg_type = "error"
-        st.rerun()
-
-if b3.button("❌ 전체 포지션 종료", use_container_width=True):
+if b1.button("롱 진입"): 
+    st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
+    st.session_state.balance -= amt; st.rerun()
+if b2.button("숏 진입"):
+    st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'mode': mode_margin, 'time': datetime.now().strftime('%H:%M:%S')})
+    st.session_state.balance -= amt; st.rerun()
+if b3.button("❌ 전체 포지션 종료"):
     for p in st.session_state.positions:
         pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-        if p['mode'] == "교차 (Cross)" and (p['margin'] + pnl) <= 0: pnl = -p['margin']
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {p['type']} 종료({p['mode']}): {pnl:+.2f} USDT")
         st.session_state.balance += (p['margin'] + pnl)
-    st.session_state.positions = []
-    st.session_state.msg = "🔴 포지션 종료 하였습니다."
-    st.session_state.msg_type = "error"
-    st.rerun()
+    st.session_state.positions = []; st.rerun()
 
-if st.button("🔄 가상머니 초기화", use_container_width=True):
-    st.session_state.balance = 10000.0
-    st.session_state.positions = []
-    st.session_state.logs = []
-    st.session_state.auto_trading = False
-    st.rerun()
+if st.button("🔄 가상머니 초기화"):
+    st.session_state.balance = 10000.0; st.session_state.positions = []; st.session_state.logs = []; st.rerun()
 
 st.subheader("거래 로그")
-for log in reversed(st.session_state.logs[-10:]):
-    st.text(log)
-
-time.sleep(0.3)
-st.rerun()
+for log in reversed(st.session_state.logs[-10:]): st.text(log)
+time.sleep(0.3); st.rerun()
 

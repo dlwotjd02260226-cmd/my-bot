@@ -1,4 +1,4 @@
-import streamlit as st
+Import streamlit as st
 import requests
 import time
 from datetime import datetime
@@ -27,11 +27,11 @@ def calculate_sr_score(price, df):
     for s in supports[-3:]:
         if abs(price - s) / price < 0.005: 
             score += 3
-            logic_msg += f"지지선 {s:.2f} 근접. "
+            logic_msg += f"지지선 {s:.2f} 근접. 현재 지지 구간이므로 롱 진입 또는 눌림목 매수를 고려하십시오. "
     for r in resistances[-3:]:
         if abs(price - r) / price < 0.005: 
             score -= 3
-            logic_msg += f"저항선 {r:.2f} 근접. "
+            logic_msg += f"저항선 {r:.2f} 근접. 현재 저항 구간이므로 숏 진입 또는 보유 롱 포지션 청산을 권장합니다. "
     return score, supports, resistances, logic_msg
 
 # 페이지 설정
@@ -76,7 +76,15 @@ price = get_price()
 # 제목
 st.markdown("<div style='font-size: 42px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
 
-# [위치 조정된 설정 UI 영역]
+# [알림창 고정 자리]
+msg_placeholder = st.empty()
+if st.session_state.msg:
+    c_class = "msg-success" if st.session_state.msg_type == "success" else "msg-error"
+    msg_placeholder.markdown(f'<div class="fixed-msg-area {c_class}">{st.session_state.msg}</div>', unsafe_allow_html=True)
+    time.sleep(1)
+    st.session_state.msg = None
+
+# [설정 UI 영역]
 col_mode1, col_mode2 = st.columns(2)
 with col_mode1:
     mode_real = st.radio("매매 모드", ["가상 매매", "실전 매매"], key="is_real", horizontal=True)
@@ -102,14 +110,6 @@ lev = col1.number_input("레버리지 (1~125)", min_value=1, max_value=125, valu
 amt = col2.number_input("배팅 금액(USDT)", value=100.0)
 st.divider()
 
-# [메시지 알림 UI 복구]
-msg_placeholder = st.empty()
-if st.session_state.msg:
-    c_class = "msg-success" if st.session_state.msg_type == "success" else "msg-error"
-    msg_placeholder.markdown(f'<div class="fixed-msg-area {c_class}">{st.session_state.msg}</div>', unsafe_allow_html=True)
-    time.sleep(1)
-    st.session_state.msg = None
-
 # 차트 표시
 components.html("""
 <div id="tv"></div>
@@ -128,7 +128,7 @@ for tf, t_weight in time_weights.items():
         score, supports, resistances, log_msg = calculate_sr_score(price, df)
         final_score = score * strategy_tier * t_weight
         total_score += final_score
-        analysis_summary.append((tf, final_score, supports, resistances, log_msg))
+        analysis_summary.append((tf, final_score, supports, resistances, log_msg, log_msg))
 
 # 자동 청산 로직
 for p in st.session_state.positions[:]:
@@ -169,8 +169,6 @@ st.markdown(f"""
 
 # 자동 매매 제어 영역
 with st.container(border=True):
-    # [추가] 시각화된 상태 UI
-    st.markdown(f"### ⚙️ 자동 매매 시스템 상태: {'🟢 [가동 중]' if st.session_state.auto_trading else '⚪ [대기 중]'}")
     col_auto1, col_auto2 = st.columns(2)
     if st.session_state.auto_trading:
         col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)
@@ -197,7 +195,7 @@ if not st.session_state.positions:
     st.write("보유 포지션 없음")
 else:
     for i, p in enumerate(st.session_state.positions):
-        pnl = ((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev']
+        pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         liq_price = p['entry'] * (1 - (1 / p['lev'])) if p['type'] == '롱' else p['entry'] * (1 + (1 / p['lev']))
         
         c_pos1, c_pos2 = st.columns([0.8, 0.2])
@@ -221,47 +219,7 @@ else:
                 set_msg(f"{p['type']} 포지션이 정리되었습니다.")
                 st.rerun()
 
-# [추가] 수동 매매 버튼 제목 추가
-st.subheader("수동 매매 버튼")
-b1, b2, b3, b4 = st.columns(4)
-if b1.button("롱 진입", use_container_width=True):
-    if amt > st.session_state.balance:
-        set_msg("잔액 부족으로 배팅할 수 없습니다.", "error")
-    else:
-        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
-        st.session_state.balance -= amt
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | 롱 진입")
-        set_msg("수동 롱 진입 완료")
-        st.rerun()
-if b2.button("숏 진입", use_container_width=True):
-    if amt > st.session_state.balance:
-        set_msg("잔액 부족으로 배팅할 수 없습니다.", "error")
-    else:
-        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
-        st.session_state.balance -= amt
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | 숏 진입")
-        set_msg("수동 숏 진입 완료")
-        st.rerun()
-if b3.button("❌ 전체 포지션 종료", use_container_width=True):
-    for p in st.session_state.positions:
-        pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
-        if pnl > 0: st.session_state.wins_total += pnl
-        else: st.session_state.losses_total += abs(pnl)
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | 전체 포지션 강제종료 ({pnl:+.2f} USDT)")
-        st.session_state.balance += (p['margin'] + pnl)
-    st.session_state.positions = []
-    set_msg("전체 포지션 종료")
-    st.rerun()
-if b4.button("🔄 가상머니 초기화", use_container_width=True):
-    st.session_state.balance = 10000.0
-    st.session_state.positions = []
-    st.session_state.logs = []
-    st.session_state.wins_total = 0.0
-    st.session_state.losses_total = 0.0
-    set_msg("초기화 완료")
-    st.rerun()
-
-# [섹션 분리: 매매 점수와 신호]
+# [매매 신호 상태]
 st.subheader("매매 신호 상태")
 with st.container(border=True):
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
@@ -275,20 +233,68 @@ with st.container(border=True):
     elif total_score <= -25: status_col2.error("🔴 숏 진입 신호")
     else: status_col2.warning("⚪ 신호: 계산 중 (진입 대기)")
 
-# [섹션 분리: 매매 분석 엔진 및 상세 보기]
+# [매매 분석 엔진]
 st.subheader("매매 분석 엔진")
 with st.container(border=True):
-    st.info("📊 현재 전략: 매물대 분석")
     with st.expander("🔍 매매 분석 상세 보기 (펼치기)", expanded=True):
-        for tf, f_score, supports, resistances, log_msg in analysis_summary:
+        for tf, f_score, sup, res, log, raw_log in analysis_summary:
             st.markdown(f"<p style='font-size: 18px; font-weight: bold;'>📍 {tf} 타임프레임 분석</p>", unsafe_allow_html=True)
-            st.write(f"분석 근거: {log_msg if log_msg else '데이터 없음'}")
+            
+            # 구체적인 전략 판단 로직 추가
+            strategy_advice = ""
+            if f_score > 0:
+                strategy_advice = "현재 매물대가 지지선 역할을 하고 있어 가격 반등 가능성이 높습니다. 롱 포지션 진입 또는 기존 숏 포지션 청산을 고려하십시오."
+            elif f_score < 0:
+                strategy_advice = "현재 매물대가 저항선 역할을 하고 있어 추가 상승이 어렵습니다. 숏 포지션 진입 또는 기존 롱 포지션 익절을 고려하십시오."
+            else:
+                strategy_advice = "현재 가격대가 주요 매물대와 거리가 있어 명확한 방향성이 없습니다. 관망을 추천합니다."
+                
+            st.info(f"분석 상세 내용: {raw_log if raw_log else '데이터 없음'}")
+            st.write(f"**전략 가이드:** {strategy_advice}")
+            
             c1, c2 = st.columns(2)
-            c1.table(pd.DataFrame(supports[-3:], columns=["지지선 Price"]))
-            c2.table(pd.DataFrame(resistances[-3:], columns=["저항선 Price"]))
+            c1.table(pd.DataFrame(sup[-3:], columns=["지지선 Price"]))
+            c2.table(pd.DataFrame(res[-3:], columns=["저항선 Price"]))
             st.divider()
 
 st.divider()
+b1, b2, b3 = st.columns(3)
+if b1.button("롱 진입", use_container_width=True):
+    if amt <= st.session_state.balance:
+        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
+        st.session_state.balance -= amt
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | 롱 진입")
+        set_msg("수동 롱 진입 완료")
+        st.rerun()
+    else: set_msg("잔액 부족", "error")
+if b2.button("숏 진입", use_container_width=True):
+    if amt <= st.session_state.balance:
+        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
+        st.session_state.balance -= amt
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | 숏 진입")
+        set_msg("수동 숏 진입 완료")
+        st.rerun()
+    else: set_msg("잔액 부족", "error")
+if b3.button("❌ 전체 포지션 종료", use_container_width=True):
+    for p in st.session_state.positions:
+        pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
+        if pnl > 0: st.session_state.wins_total += pnl
+        else: st.session_state.losses_total += abs(pnl)
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | 전체 포지션 강제종료 ({pnl:+.2f} USDT)")
+        st.session_state.balance += (p['margin'] + pnl)
+    st.session_state.positions = []
+    set_msg("전체 포지션 종료")
+    st.rerun()
+
+if st.button("🔄 가상머니 초기화", use_container_width=True):
+    st.session_state.balance = 10000.0
+    st.session_state.positions = []
+    st.session_state.logs = []
+    st.session_state.wins_total = 0.0
+    st.session_state.losses_total = 0.0
+    set_msg("초기화 완료")
+    st.rerun()
+
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-10:]):
     st.text(log)

@@ -169,6 +169,11 @@ st.markdown(f"""
 
 # 자동 매매 제어 영역
 with st.container(border=True):
+    if st.session_state.auto_trading:
+        st.markdown("<div style='text-align: center; color: green; font-weight: bold; margin-bottom: 10px;'>🟢 현재 상태: 자동 매매 중</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='text-align: center; color: gray; font-weight: bold; margin-bottom: 10px;'>⚪ 현재 상태: 자동 매매 대기 중</div>", unsafe_allow_html=True)
+    
     col_auto1, col_auto2 = st.columns(2)
     if st.session_state.auto_trading:
         col_auto1.button("🟢 자동 매매 중", disabled=True, use_container_width=True)

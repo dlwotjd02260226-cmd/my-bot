@@ -3,6 +3,7 @@ import requests
 import time
 from datetime import datetime
 import streamlit.components.v1 as components
+import pandas as pd  # [추가됨]
 
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
@@ -24,6 +25,29 @@ st.markdown("""
     .msg-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
 """, unsafe_allow_html=True)
+
+# [추가됨] 매매 엔진 함수들
+def get_klines(tf='30m', limit=100):
+    url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
+    try:
+        r = requests.get(url, timeout=2)
+        data = r.json()['data']
+        df = pd.DataFrame(data, columns=['ts', 'o', 'h', 'l', 'close', 'vol', 'confirm'])
+        df['close'] = df['close'].astype(float)
+        df['high'] = df['high'].astype(float)
+        df['low'] = df['low'].astype(float)
+        return df.iloc[::-1].reset_index(drop=True)
+    except: return None
+
+def calculate_sr_score(price, df):
+    supports = [df['low'].iloc[i] for i in range(5, len(df)-5) if df['low'].iloc[i] < df['low'].iloc[i-5:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+6].min()]
+    resistances = [df['high'].iloc[i] for i in range(5, len(df)-5) if df['high'].iloc[i] > df['high'].iloc[i-5:i].max() and df['high'].iloc[i] > df['high'].iloc[i+1:i+6].max()]
+    score = 0
+    for s in supports[-3:]:
+        if abs(price - s) / price < 0.005: score += 3
+    for r in resistances[-3:]:
+        if abs(price - r) / price < 0.005: score -= 3
+    return score, supports, resistances
 
 # 세션 상태 초기화
 if 'balance' not in st.session_state:
@@ -136,20 +160,27 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-# 매매 판단 엔진 상태
+# [수정됨] 매매 판단 엔진 상태
 st.subheader("매매 분석 엔진 상태")
+df_30m = get_klines('30m') 
+sr_score, supports, resistances = calculate_sr_score(price, df_30m)
+
+decision = "중립 대기"
+if sr_score >= 3: decision = "🟢 롱 진입 구간"
+elif sr_score <= -3: decision = "🔴 숏 진입 구간"
+
 status_col1, status_col2 = st.columns(2)
-status_col1.info("📊 현재 전략: 대기중")
-status_col2.warning("⚪ 신호: 신호 없음")
+status_col1.info(f"📊 전략 점수: {sr_score}점")
+status_col2.warning(f"⚪ 신호: {decision}")
 
 with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
-    st.markdown("""
-    * 1. 지지/저항 돌파: <span style="color: gray;">대기 중</span>
-    * 2. 거래량 분석: <span style="color: gray;">대기 중</span>
-    * 3. 고래 체결량: <span style="color: gray;">데이터 수집 전</span>
-    * 4. 다이버전스: <span style="color: gray;">데이터 수집 전</span>
+    st.markdown(f"""
+    * 1. 매물대 분석: {sr_score}점
+    * 2. 종합 점수: **{sr_score}점**
     <hr>
-    향후 모든 매매 기법의 상세 결과가 여기에 나열됩니다.
+    📍 주요 매물대(최근):
+    - 지지: {[round(x, 2) for x in supports[-3:]]}
+    - 저항: {[round(x, 2) for x in resistances[-3:]]}
     """)
 
 st.divider()
@@ -203,5 +234,4 @@ for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 
 time.sleep(0.3)
-st.rerun()
 st.rerun()

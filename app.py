@@ -137,7 +137,6 @@ for p in st.session_state.positions[:]:
         st.rerun()
 
 # [수정된 핵심 자산 계산 로직]
-# 배팅금을 차감/합산하지 않고, 초기 자본금에서 손익만 누적하여 계산
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
 current_total_asset = 10000.0 + st.session_state.wins_total - st.session_state.losses_total + total_pos_pnl
 
@@ -175,17 +174,30 @@ st.subheader("보유 중인 포지션")
 if not st.session_state.positions:
     st.write("보유 포지션 없음")
 else:
-    for p in st.session_state.positions:
+    for i, p in enumerate(st.session_state.positions):
         liq_price = p['entry'] * (1 - (1 / p['lev'])) if p['type'] == '롱' else p['entry'] * (1 + (1 / p['lev']))
-        st.markdown(f"""
-        <div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; margin-bottom: 5px; font-size: 16px;">
-        <div style="font-weight: bold;">{p['time']} | {p['type']} | {p['lev']}x</div>
-        <div style="display: flex; justify-content: space-between;">
-        <span>진입가: <b style="color: blue;">{p['entry']:.2f}</b></span>
-        <span>청산가: <b style="color: red;">{liq_price:.2f}</b></span>
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
+        
+        # 포지션 정보 출력 및 종료 버튼
+        c_pos1, c_pos2 = st.columns([0.8, 0.2])
+        with c_pos1:
+            st.markdown(f"""
+            <div style="background-color: #f0f2f6; padding: 10px; border-radius: 10px; margin-bottom: 5px; font-size: 16px;">
+            <div style="font-weight: bold;">{p['time']} | {p['type']} | {p['lev']}x</div>
+            <div style="display: flex; justify-content: space-between;">
+            <span>진입가: <b>{p['entry']:.2f}</b></span>
+            <span>청산가: <b style="color: red;">{liq_price:.2f}</b></span>
+            </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c_pos2:
+            if st.button("종료 X", key=f"close_{i}"):
+                pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
+                if pnl > 0: st.session_state.wins_total += pnl
+                else: st.session_state.losses_total += abs(pnl)
+                st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | {p['type']} 특정 포지션 종료 ({pnl:+.2f} USDT)")
+                st.session_state.balance += (p['margin'] + pnl)
+                st.session_state.positions.pop(i)
+                st.rerun()
 
 # 매매 분석 엔진
 with st.container(border=True):
@@ -232,6 +244,15 @@ if b3.button("❌ 전체 포지션 종료", use_container_width=True):
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 수동배팅 | 전체 포지션 강제종료 ({pnl:+.2f} USDT)")
         st.session_state.balance += (p['margin'] + pnl)
     st.session_state.positions = []
+    st.rerun()
+
+# 가상머니 초기화 버튼
+if st.button("🔄 가상머니 초기화", use_container_width=True):
+    st.session_state.balance = 10000.0
+    st.session_state.positions = []
+    st.session_state.logs = []
+    st.session_state.wins_total = 0.0
+    st.session_state.losses_total = 0.0
     st.rerun()
 
 st.subheader("거래 로그")

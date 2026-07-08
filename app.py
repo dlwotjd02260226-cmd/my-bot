@@ -5,7 +5,7 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
 
-# [필수 엔진 함수 추가]
+# [필수 엔진 함수]
 def get_klines(tf='1h', limit=50):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
@@ -35,16 +35,7 @@ st.set_page_config(page_title="BTC Bot", layout="centered")
 # CSS: 메시지 영역 및 스타일
 st.markdown("""
     <style>
-    .fixed-msg-area {
-        height: 70px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 20px;
-        border-radius: 5px;
-        font-weight: bold;
-        width: 100%;
-    }
+    .fixed-msg-area { height: 70px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; border-radius: 5px; font-weight: bold; width: 100%; }
     .msg-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     .msg-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
@@ -188,6 +179,18 @@ with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
 
     st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
     st.warning(f"⚪ 신호: {decision}")
+    
+    # [상세 분석 대시보드 추가]
+    st.markdown("---")
+    st.markdown("### 📋 기법별 상세 분석 근거")
+    if total_score > 10: st.success("✅ **매물대: 지지 구간 강세** - 가격이 주요 지지 매물대 위에 안착하여 롱 진입 유리.")
+    elif total_score < -10: st.error("✅ **매물대: 저항 구간 강세** - 가격이 주요 저항 매물대에 도달하여 숏 진입 유리.")
+    else: st.info("✅ **매물대: 중립** - 방향성 확인 필요.")
+    
+    st.markdown("### 💡 최종 행동 가이드")
+    if total_score >= 25: st.write("👉 **롱 진입:** 매물대 지지력이 매우 강합니다. 분할 매수 대응.")
+    elif total_score <= -25: st.write("👉 **숏 진입:** 매물대 저항력이 매우 강합니다. 매도 관점 접근.")
+    else: st.write("👉 **관망:** 신호를 기다리세요.")
 
     for tf, f_score, sup, res in analysis_summary:
         st.markdown(f"**📍 {tf} 차트 (가중 점수: {f_score:.1f})**")
@@ -248,3 +251,4 @@ for log in reversed(st.session_state.logs[-10:]):
 
 time.sleep(0.3)
 st.rerun()
+

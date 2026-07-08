@@ -243,22 +243,32 @@ st.subheader("매매 분석 엔진")
 with st.container(border=True):
     st.info("📊 현재 전략: 매물대 분석")
     with st.expander("🔍 매매 분석 상세 보기 (펼치기)", expanded=True):
-        # 향후 기법 추가 시 아래 리스트에 추가하면 됨
-        example_strategies = [
-            {"name": "강력한 지지선 반등", "score": "+15점", "desc": "강력한 지지선 구간으로 반등 시 롱 진입 근거가 됩니다."},
-            {"name": "저항선 돌파 실패", "score": "-10점", "desc": "저항선 도달 후 돌파 실패 시 롱 청산 및 숏 진입 근거가 됩니다."}
+        # 전략 데이터 (나중에 수십 개로 확장 가능)
+        strategies = [
+            {"name": "강력한 지지선 반등", "score": 15, "condition": lambda p, s, r: any(abs(p - sup) / p < 0.005 for sup in s), "desc": "강력한 지지선 근접으로 롱 진입 근거 확보."},
+            {"name": "저항선 돌파 실패", "score": -10, "condition": lambda p, s, r: any(abs(p - res) / p < 0.005 for res in r), "desc": "저항선 근접 및 돌파 실패로 숏 진입 근거 확보."}
         ]
-        for strat in example_strategies:
-            st.markdown(f"**{strat['name']}** ({strat['score']})")
-            st.write(f"- 상세 근거: {strat['desc']}")
-            st.divider()
-
+        
+        # 활성화된 전략만 필터링
+        active_strategies = []
         for tf, f_score, sup, res, log in analysis_summary:
-            st.markdown(f"<p style='font-size: 18px; font-weight: bold;'>📍 {tf} 타임프레임 분석</p>", unsafe_allow_html=True)
-            st.write(f"분석 근거: {log if log else '데이터 없음'}")
+            for strat in strategies:
+                if strat["condition"](price, sup, res):
+                    active_strategies.append((tf, strat))
+        
+        if not active_strategies:
+            st.write("현재 조건에 부합하는 매매 기법이 없습니다.")
+        else:
+            for tf, strat in active_strategies:
+                st.markdown(f"**[{tf}] {strat['name']}** ({strat['score']}점)")
+                st.caption(f"근거: {strat['desc']}")
+        
+        st.divider()
+        for tf, f_score, sup, res, log in analysis_summary:
+            st.markdown(f"<p style='font-size: 14px; font-weight: bold;'>📍 {tf} 타임프레임 요약</p>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
-            c1.table(pd.DataFrame(sup[-3:], columns=["지지선 Price"]))
-            c2.table(pd.DataFrame(res[-3:], columns=["저항선 Price"]))
+            c1.table(pd.DataFrame(sup[-3:], columns=["지지선"]))
+            c2.table(pd.DataFrame(res[-3:], columns=["저항선"]))
             st.divider()
 
 st.divider()
@@ -303,4 +313,3 @@ for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 time.sleep(0.3)
 st.rerun()
-

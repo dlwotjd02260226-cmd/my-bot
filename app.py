@@ -243,6 +243,16 @@ st.subheader("매매 분석 엔진")
 with st.container(border=True):
     st.info("📊 현재 전략: 매물대 분석")
     with st.expander("🔍 매매 분석 상세 보기 (펼치기)", expanded=True):
+        # 향후 기법 추가 시 아래 리스트에 추가하면 됨
+        example_strategies = [
+            {"name": "강력한 지지선 반등", "score": "+15점", "desc": "강력한 지지선 구간으로 반등 시 롱 진입 근거가 됩니다."},
+            {"name": "저항선 돌파 실패", "score": "-10점", "desc": "저항선 도달 후 돌파 실패 시 롱 청산 및 숏 진입 근거가 됩니다."}
+        ]
+        for strat in example_strategies:
+            st.markdown(f"**{strat['name']}** ({strat['score']})")
+            st.write(f"- 상세 근거: {strat['desc']}")
+            st.divider()
+
         for tf, f_score, sup, res, log in analysis_summary:
             st.markdown(f"<p style='font-size: 18px; font-weight: bold;'>📍 {tf} 타임프레임 분석</p>", unsafe_allow_html=True)
             st.write(f"분석 근거: {log if log else '데이터 없음'}")
@@ -252,7 +262,6 @@ with st.container(border=True):
             st.divider()
 
 st.divider()
-st.subheader("수동 매매 버튼")
 b1, b2, b3 = st.columns(3)
 if b1.button("롱 진입", use_container_width=True):
     if amt <= st.session_state.balance:
@@ -294,3 +303,4 @@ for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 time.sleep(0.3)
 st.rerun()
+

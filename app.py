@@ -1,4 +1,5 @@
 
+
 import streamlit as st
 import requests
 import time
@@ -142,34 +143,17 @@ st.subheader("매매 분석 엔진 상태")
 status_col1, status_col2 = st.columns(2)
 status_col1.info("📊 현재 전략: 대기중")
 status_col2.warning("⚪ 신호: 신호 없음")
+
 with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
-    # [지능형 엔진: 매물대 가중치 분석 시작]
-    time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
-    total_score = 0
-    analysis_summary = []
-    strategy_tier = 1.5 
+    st.markdown("""
+    * 1. 지지/저항 돌파: <span style="color: gray;">대기 중</span>
+    * 2. 거래량 분석: <span style="color: gray;">대기 중</span>
+    * 3. 고래 체결량: <span style="color: gray;">데이터 수집 전</span>
+    * 4. 다이버전스: <span style="color: gray;">데이터 수집 전</span>
+    <hr>
+    향후 모든 매매 기법의 상세 결과가 여기에 나열됩니다.
+    """)
 
-    for tf, t_weight in time_weights.items():
-        df = get_klines(tf)
-        if df is not None and not df.empty:
-            score, supports, resistances = calculate_sr_score(price, df)
-            final_score = score * strategy_tier * t_weight
-            total_score += final_score
-            analysis_summary.append((tf, final_score, supports, resistances))
-
-    decision = "⚪ 시장 관망"
-    if total_score >= 25: decision = "🟢 강력한 롱 진입 구간"
-    elif total_score <= -25: decision = "🔴 강력한 숏 진입 구간"
-
-    st.markdown(f"### 📊 종합 매물대 점수: {total_score:.1f}점")
-    st.warning(f"⚪ 신호: {decision}")
-
-    for tf, f_score, sup, res in analysis_summary:
-        st.markdown(f"**📍 {tf} 차트 (가중 점수: {f_score:.1f})**")
-        c1, c2 = st.columns(2)
-        c1.write("🛡️ 지지"); c1.table(pd.DataFrame(sup[-3:], columns=["Price"]))
-        c2.write("⚔️ 저항"); c2.table(pd.DataFrame(res[-3:], columns=["Price"]))
-        st.divider()
 st.divider()
 
 # 매매 버튼
@@ -223,4 +207,3 @@ for log in reversed(st.session_state.logs[-10:]):
 time.sleep(0.3)
 st.rerun()
 st.rerun()
-

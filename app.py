@@ -3,12 +3,9 @@ import requests
 import time
 from datetime import datetime
 import streamlit.components.v1 as components
-import pandas as pd # [추가]
+import pandas as pd
 
-# 페이지 설정
-st.set_page_config(page_title="BTC Bot", layout="centered")
-
-# [추가] 매물대 분석 엔진 함수 (기존 코드 중간 빈 공간에 추가)
+# [추가됨] 매매 엔진 함수
 def get_klines(tf='30m', limit=100):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
@@ -31,6 +28,9 @@ def calculate_sr_score(price, df):
     for r in resistances[-3:]:
         if abs(price - r) / price < 0.005: score -= 3
     return score, supports, resistances
+
+# 페이지 설정
+st.set_page_config(page_title="BTC Bot", layout="centered")
 
 # CSS: 메시지 영역 및 스타일
 st.markdown("""
@@ -161,28 +161,41 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-# [수정] 매매 분석 엔진 상태
+# [수정됨] 매매 판단 엔진 상태 (UI 유지 및 엔진 통합)
 st.subheader("매매 분석 엔진 상태")
 df_30m = get_klines('30m')
 if df_30m is not None:
     sr_score, supports, resistances = calculate_sr_score(price, df_30m)
-    decision = "🟢 롱 진입 구간" if sr_score >= 3 else ("🔴 숏 진입 구간" if sr_score <= -3 else "중립 대기")
-    
+    decision = "🟢 롱 진입 구간" if sr_score >= 3 else ("🔴 숏 진입 구간" if sr_score <= -3 else "⚪ 신호: 신호 없음")
     status_col1, status_col2 = st.columns(2)
     status_col1.info(f"📊 전략 점수: {sr_score}점")
-    status_col2.warning(f"⚪ 신호: {decision}")
+    status_col2.warning(f"⚪ {decision}")
+else:
+    status_col1, status_col2 = st.columns(2)
+    status_col1.info("📊 현재 전략: 대기중")
+    status_col2.warning("⚪ 신호: 신호 없음")
 
-    with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
+with st.expander("🔍 매매 분석 상세 보기 (펼치기)"):
+    if df_30m is not None:
         st.markdown(f"""
-        * 1. 매물대 분석: {sr_score}점
-        * 2. 종합 점수: **{sr_score}점**
+        * 1. 지지/저항 돌파: <span style="color: green;">{sr_score}점 (분석 완료)</span>
+        * 2. 거래량 분석: <span style="color: gray;">대기 중</span>
+        * 3. 고래 체결량: <span style="color: gray;">데이터 수집 전</span>
+        * 4. 다이버전스: <span style="color: gray;">데이터 수집 전</span>
         <hr>
         📍 주요 매물대(최근):
         - 지지: {[round(x, 2) for x in supports[-3:]]}
         - 저항: {[round(x, 2) for x in resistances[-3:]]}
         """)
-else:
-    st.info("📊 데이터 분석 중...")
+    else:
+        st.markdown("""
+        * 1. 지지/저항 돌파: <span style="color: gray;">대기 중</span>
+        * 2. 거래량 분석: <span style="color: gray;">대기 중</span>
+        * 3. 고래 체결량: <span style="color: gray;">데이터 수집 전</span>
+        * 4. 다이버전스: <span style="color: gray;">데이터 수집 전</span>
+        <hr>
+        향후 모든 매매 기법의 상세 결과가 여기에 나열됩니다.
+        """, unsafe_allow_html=True)
 
 st.divider()
 

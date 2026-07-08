@@ -140,7 +140,7 @@ st.markdown(f"""
 
 col1, col2 = st.columns(2)
 lev = col1.slider("레버리지", 1, 125, 10)
-amt = col2.number_input("증거금(USDT)", value=100.0)
+amt = col2.number_input("배팅금액(USDT)", value=100.0)
 
 msg_placeholder = st.empty()
 if st.session_state.msg:

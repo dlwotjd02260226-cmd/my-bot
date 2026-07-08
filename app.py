@@ -64,21 +64,6 @@ price = get_price()
 # 제목
 st.markdown("<div style='font-size: 42px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
 
-# 매매 운영 모드 설정 UI
-st.subheader("매매 운영 모드 설정")
-mode_option = st.radio("운영 모드 선택", ["수동 모드", "오토 모드"], key="mode_radio", horizontal=True)
-st.session_state.mode = "오토" if mode_option == "오토 모드" else "수동"
-
-col_set1, col_set2 = st.columns(2)
-is_auto = (st.session_state.mode == "오토")
-st.session_state.tp_input = col_set1.number_input("익절 (%)", value=2.0, disabled=is_auto)
-st.session_state.sl_input = col_set2.number_input("손절 (%)", value=1.0, disabled=is_auto)
-
-# [수정] 레버리지 숫자 입력방식
-col1, col2 = st.columns(2)
-lev = col1.number_input("레버리지 (1~125)", min_value=1, max_value=125, value=10)
-amt = col2.number_input("배팅 금액(USDT)", value=100.0)
-
 # 실전/가상 매매 및 교차/격리 모드 선택
 col_mode1, col_mode2 = st.columns(2)
 with col_mode1:
@@ -91,6 +76,17 @@ if mode_real == "실전 매매":
 else:
     st.success(f"✅ 가상 매매 모드 ({mode_margin}) 입니다.")
 
+# [이동 완료] 매매 운영 모드 설정 UI를 차트 바로 위로 이동
+st.subheader("매매 운영 모드 설정")
+mode_option = st.radio("운영 모드 선택", ["수동 모드", "오토 모드"], key="mode_radio", horizontal=True)
+st.session_state.mode = "오토" if mode_option == "오토 모드" else "수동"
+
+col_set1, col_set2 = st.columns(2)
+is_auto = (st.session_state.mode == "오토")
+st.session_state.tp_input = col_set1.number_input("익절 (%)", value=2.0, disabled=is_auto)
+st.session_state.sl_input = col_set2.number_input("손절 (%)", value=1.0, disabled=is_auto)
+
+# 차트 표시
 components.html("""
 <div id="tv"></div>
 <script src="https://s3.tradingview.com/tv.js"></script>
@@ -127,6 +123,11 @@ for p in st.session_state.positions[:]:
         st.session_state.balance += (p['margin'] + pnl_val)
         st.session_state.positions.remove(p)
         st.rerun()
+
+# 레버리지 및 배팅 금액 입력
+col1, col2 = st.columns(2)
+lev = col1.number_input("레버리지 (1~125)", min_value=1, max_value=125, value=10)
+amt = col2.number_input("배팅 금액(USDT)", value=100.0)
 
 total_pos_pnl = sum(((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev'] for p in st.session_state.positions)
 total_margin_in_pos = sum(p['margin'] for p in st.session_state.positions)
@@ -251,4 +252,3 @@ for log in reversed(st.session_state.logs[-10:]):
     st.text(log)
 time.sleep(0.3)
 st.rerun()
-

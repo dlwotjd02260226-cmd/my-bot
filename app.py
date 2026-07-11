@@ -5,7 +5,7 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
 
-# [필수 엔진 함수: 500개 캔들 호출로 변경]
+# [필수 엔진 함수: 500개 캔들 호출]
 def get_klines(tf='1h', limit=500):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
@@ -20,7 +20,7 @@ def get_klines(tf='1h', limit=500):
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
 
-# [이식 완료: 500개 캔들 기반 변곡점 분석 엔진 탑재]
+# [이식 완료: 상세 브리핑이 반드시 출력되도록 수정된 변곡점 엔진]
 def calculate_sr_score(price, df):
     is_high = (df['high'] > df['high'].shift(1)) & (df['high'] > df['high'].shift(-1))
     is_low = (df['low'] < df['low'].shift(1)) & (df['low'] < df['low'].shift(-1))
@@ -29,11 +29,15 @@ def calculate_sr_score(price, df):
     near_h = pivots_h[(pivots_h['high'] - price).abs() / price < 0.007]
     near_l = pivots_l[(pivots_l['low'] - price).abs() / price < 0.007]
     avg_vol = df['vol'].mean()
+    
     sup_score = (len(near_l) * 20) + (near_l['vol'].max() / avg_vol * 10 if not near_l.empty else 0)
     res_score = (len(near_h) * 20) + (near_h['vol'].max() / avg_vol * 10 if not near_h.empty else 0)
     score = sup_score - res_score
-    logic_msg = f"변곡점 분석: 지지점수 {sup_score:.1f} / 저항점수 {res_score:.1f}. 꼭짓점 근거 기반 분석 완료."
-    return score, [], [], logic_msg
+    
+    # 원본 코드의 출력 구조에 맞춰 log_msg를 명확히 작성
+    log_msg = f"지지점수: {sup_score:.1f} / 저항점수: {res_score:.1f} | 500개 캔들 전수조사 완료"
+    
+    return score, list(near_l['low']), list(near_h['high']), log_msg
 
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
@@ -151,7 +155,7 @@ for p in st.session_state.positions[:]:
         else: st.session_state.losses_total += abs(pnl_val)
         
         log_type = "자동" if st.session_state.auto_trading else "수동"
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 진입가: {p['entry']:.2f} | 수익: {pnl_val:+.2f} USDT")
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 수익: {pnl_val:+.2f} USDT")
         
         st.session_state.balance += (p['margin'] + pnl_val)
         st.session_state.positions.remove(p)
@@ -291,5 +295,6 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
 
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
-time.sleep(0.3)
+time.sleep(10.0)
 st.rerun()
+

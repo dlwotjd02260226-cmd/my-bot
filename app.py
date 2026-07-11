@@ -250,7 +250,7 @@ with st.container(border=True):
 # [섹션 분리: 매매 분석 엔진 및 상세 보기]
 st.subheader("지지 저항선 분석")
 with st.container(border=True):
-    st.info("📊 현재 전략: 500개 캔들 분석")
+    st.info("📊 현재 전략: 지지.저항 분석")
     with st.expander("🔍 상세 브리핑 보기", expanded=True):
         for tf, f_score, sup, res, log_msg in analysis_summary:
             st.write(f"📍 **[{tf}]** {log_msg}")

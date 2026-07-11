@@ -5,8 +5,8 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
 
-# [필수 엔진 함수]
-def get_klines(tf='1h', limit=50):
+# [필수 엔진 함수 - 모든 타임프레임 500개 봉 데이터 호출]
+def get_klines(tf='1h', limit=500):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)
@@ -20,8 +20,9 @@ def get_klines(tf='1h', limit=50):
     except: return None
 
 def calculate_sr_score(price, df):
-    supports = [df['low'].iloc[i] for i in range(5, len(df)-5) if df['low'].iloc[i] < df['low'].iloc[i-5:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+6].min()]
-    resistances = [df['high'].iloc[i] for i in range(5, len(df)-5) if df['high'].iloc[i] > df['high'].iloc[i-5:i].max() and df['high'].iloc[i] > df['high'].iloc[i+1:i+6].max()]
+    # 500개 봉 기반 지지/저항 탐색 범위 설정
+    supports = [df['low'].iloc[i] for i in range(10, len(df)-10) if df['low'].iloc[i] < df['low'].iloc[i-10:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+11].min()]
+    resistances = [df['high'].iloc[i] for i in range(10, len(df)-10) if df['high'].iloc[i] > df['high'].iloc[i-10:i].max() and df['high'].iloc[i] > df['high'].iloc[i+1:i+11].max()]
     score = 0
     logic_msg = ""
     for s in supports[-3:]:
@@ -70,7 +71,6 @@ if 'balance' not in st.session_state:
     st.session_state.wins_total = 0.0
     st.session_state.losses_total = 0.0
 
-# 메시지 알림 함수
 def set_msg(txt):
     st.session_state.msg_trigger = txt
     if "롱" in txt: st.session_state.msg_color = "#28a745"
@@ -78,7 +78,6 @@ def set_msg(txt):
     elif "부족" in txt or "종료" in txt: st.session_state.msg_color = "#dc3545"
     else: st.session_state.msg_color = "#333"
 
-# 시세 가져오기 함수
 def get_price():
     try:
         r = requests.get("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", timeout=2)
@@ -127,7 +126,7 @@ total_score = 0
 analysis_summary = []
 strategy_tier = 1.5 
 for tf, t_weight in time_weights.items():
-    df = get_klines(tf)
+    df = get_klines(tf, limit=500) # 500개 봉 데이터 호출
     if df is not None and not df.empty:
         score, supports, resistances, log_msg = calculate_sr_score(price, df)
         final_score = score * strategy_tier * t_weight
@@ -150,7 +149,6 @@ for p in st.session_state.positions[:]:
         else: st.session_state.losses_total += abs(pnl_val)
         
         log_type = "자동" if st.session_state.auto_trading else "수동"
-        # 상세 로그 기록
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 진입가: {p['entry']:.2f} | 수익: {pnl_val:+.2f} USDT")
         
         st.session_state.balance += (p['margin'] + pnl_val)
@@ -229,7 +227,6 @@ else:
                 set_msg(f"{p['type']} 포지션 정리 완료")
                 st.rerun()
 
-# [섹션 분리: 매매 점수와 신호]
 st.subheader("매매 신호 상태")
 with st.container(border=True):
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
@@ -243,30 +240,17 @@ with st.container(border=True):
     elif total_score <= -25: status_col2.error("🔴 숏 진입 신호")
     else: status_col2.warning("⚪ 신호: 대기 중")
 
-# [섹션 분리: 매매 분석 엔진 및 상세 보기]
+# [매매 분석 엔진: 상세 타임프레임별 지지/저항 표시]
 st.subheader("매매 분석 엔진")
 with st.container(border=True):
-    st.info("📊 현재 전략: 매물대 분석")
-    with st.expander("🔍 상세 분석 보기", expanded=True):
-        strategies = [
-            {"name": "강력한 지지선 반등", "score": 15, "condition": lambda p, s, r: any(abs(p - sup) / p < 0.005 for sup in s), "desc": "강력한 지지선 근접."},
-            {"name": "저항선 돌파 실패", "score": -10, "condition": lambda p, s, r: any(abs(p - res) / p < 0.005 for res in r), "desc": "저항선 근접 및 돌파 실패."}
-        ]
-        active_strategies = []
-        for tf, f_score, sup, res, log in analysis_summary:
-            for strat in strategies:
-                if strat["condition"](price, sup, res):
-                    active_strategies.append((tf, strat))
-        if not active_strategies: st.write("현재 조건에 부합하는 매매 기법 없음.")
-        else:
-            for tf, strat in active_strategies:
-                st.markdown(f"**[{tf}] {strat['name']}**")
-        st.divider()
-        for tf, f_score, sup, res, log in analysis_summary:
-            st.write(f"📍 {tf} 타임프레임 요약")
+    st.info("📊 현재 전략: 500개 봉 매물대 분석")
+    for tf, f_score, sup, res, log_msg in analysis_summary:
+        with st.expander(f"🔍 [{tf} 타임프레임] 지지/저항 상세 분석", expanded=True):
+            st.write(f"신호: {log_msg if log_msg else '특이 사항 없음'}")
+            st.write(f"기여 점수: {f_score:.2f}점")
             c1, c2 = st.columns(2)
-            c1.table(pd.DataFrame(sup[-2:], columns=["지지"]))
-            c2.table(pd.DataFrame(res[-2:], columns=["저항"]))
+            c1.table(pd.DataFrame(sup[-3:], columns=["최근 지지"]))
+            c2.table(pd.DataFrame(res[-3:], columns=["최근 저항"]))
 
 st.divider()
 st.subheader("수동 매매")

@@ -5,8 +5,8 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
 
-# [필수 엔진 함수: 500개 캔들 호출]
-def get_klines(tf='1h', limit=500):
+# [필수 엔진 함수]
+def get_klines(tf='1h', limit=50):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)
@@ -16,28 +16,23 @@ def get_klines(tf='1h', limit=500):
         df['close'] = df['close'].astype(float)
         df['high'] = df['high'].astype(float)
         df['low'] = df['low'].astype(float)
-        df['vol'] = df['vol'].astype(float)
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
 
-# [지지 저항선 분석 엔진]
 def calculate_sr_score(price, df):
-    is_high = (df['high'] > df['high'].shift(1)) & (df['high'] > df['high'].shift(-1))
-    is_low = (df['low'] < df['low'].shift(1)) & (df['low'] < df['low'].shift(-1))
-    pivots_h = df[is_high][['high', 'vol']].copy()
-    pivots_l = df[is_low][['low', 'vol']].copy()
-    
-    near_h = pivots_h[(pivots_h['high'] - price).abs() / price < 0.007]
-    near_l = pivots_l[(pivots_l['low'] - price).abs() / price < 0.007]
-    
-    avg_vol = df['vol'].mean()
-    sup_score = (len(near_l) * 20) + (near_l['vol'].max() / avg_vol * 10 if not near_l.empty else 0)
-    res_score = (len(near_h) * 20) + (near_h['vol'].max() / avg_vol * 10 if not near_h.empty else 0)
-    
-    score = sup_score - res_score
-    # 브리핑 내용이 상세하게 표기되도록 수정
-    logic_msg = f"지지선 {len(near_l)}개 감지(점수:{sup_score:.1f}), 저항선 {len(near_h)}개 감지(점수:{res_score:.1f})"
-    return score, list(near_l['low']), list(near_h['high']), logic_msg
+    supports = [df['low'].iloc[i] for i in range(5, len(df)-5) if df['low'].iloc[i] < df['low'].iloc[i-5:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+6].min()]
+    resistances = [df['high'].iloc[i] for i in range(5, len(df)-5) if df['high'].iloc[i] > df['high'].iloc[i-5:i].max() and df['high'].iloc[i] > df['high'].iloc[i+1:i+6].max()]
+    score = 0
+    logic_msg = ""
+    for s in supports[-3:]:
+        if abs(price - s) / price < 0.005: 
+            score += 3
+            logic_msg += f"지지선 {s:.2f} 근접. "
+    for r in resistances[-3:]:
+        if abs(price - r) / price < 0.005: 
+            score -= 3
+            logic_msg += f"저항선 {r:.2f} 근접. "
+    return score, supports, resistances, logic_msg
 
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
@@ -155,6 +150,7 @@ for p in st.session_state.positions[:]:
         else: st.session_state.losses_total += abs(pnl_val)
         
         log_type = "자동" if st.session_state.auto_trading else "수동"
+        # 상세 로그 기록
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 진입가: {p['entry']:.2f} | 수익: {pnl_val:+.2f} USDT")
         
         st.session_state.balance += (p['margin'] + pnl_val)
@@ -209,7 +205,7 @@ if not st.session_state.positions:
     st.write("보유 포지션 없음")
 else:
     for i, p in enumerate(st.session_state.positions):
-        pnl = ((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev']
+        pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         liq_price = p['entry'] * (1 - (1 / p['lev'])) if p['type'] == '롱' else p['entry'] * (1 + (1 / p['lev']))
         
         c_pos1, c_pos2 = st.columns([0.8, 0.2])
@@ -248,12 +244,29 @@ with st.container(border=True):
     else: status_col2.warning("⚪ 신호: 대기 중")
 
 # [섹션 분리: 매매 분석 엔진 및 상세 보기]
-st.subheader("지지 저항선 분석")
+st.subheader("매매 분석 엔진")
 with st.container(border=True):
-    st.info("📊 현재 전략: 500개 캔들 분석")
-    with st.expander("🔍 상세 브리핑 보기", expanded=True):
-        for tf, f_score, sup, res, log_msg in analysis_summary:
-            st.write(f"📍 **[{tf}]** {log_msg}")
+    st.info("📊 현재 전략: 매물대 분석")
+    with st.expander("🔍 상세 분석 보기", expanded=True):
+        strategies = [
+            {"name": "강력한 지지선 반등", "score": 15, "condition": lambda p, s, r: any(abs(p - sup) / p < 0.005 for sup in s), "desc": "강력한 지지선 근접."},
+            {"name": "저항선 돌파 실패", "score": -10, "condition": lambda p, s, r: any(abs(p - res) / p < 0.005 for res in r), "desc": "저항선 근접 및 돌파 실패."}
+        ]
+        active_strategies = []
+        for tf, f_score, sup, res, log in analysis_summary:
+            for strat in strategies:
+                if strat["condition"](price, sup, res):
+                    active_strategies.append((tf, strat))
+        if not active_strategies: st.write("현재 조건에 부합하는 매매 기법 없음.")
+        else:
+            for tf, strat in active_strategies:
+                st.markdown(f"**[{tf}] {strat['name']}**")
+        st.divider()
+        for tf, f_score, sup, res, log in analysis_summary:
+            st.write(f"📍 {tf} 타임프레임 요약")
+            c1, c2 = st.columns(2)
+            c1.table(pd.DataFrame(sup[-2:], columns=["지지"]))
+            c2.table(pd.DataFrame(res[-2:], columns=["저항"]))
 
 st.divider()
 st.subheader("수동 매매")
@@ -297,3 +310,4 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
 time.sleep(0.3)
 st.rerun()
+

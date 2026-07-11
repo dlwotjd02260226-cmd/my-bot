@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 import pandas as pd
 
 # [필수 엔진 함수 - 모든 타임프레임 500개 봉 데이터 호출]
-def get_klines(tf='1h', limit=500):
+def get_klines(tf='1h', limit=50):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)
@@ -16,7 +16,6 @@ def get_klines(tf='1h', limit=500):
         df = df[['h', 'l', 'close']].astype(float)
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
-
 def calculate_sr_score(price, df):
     # 500개 봉 기반 지지/저항 탐색 범위 설정
     supports = [df['low'].iloc[i] for i in range(10, len(df)-10) if df['low'].iloc[i] < df['low'].iloc[i-10:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+11].min()]

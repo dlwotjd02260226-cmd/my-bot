@@ -20,24 +20,24 @@ def get_klines(tf='1h', limit=500):
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
 
-# [이식 완료: 상세 브리핑이 반드시 출력되도록 수정된 변곡점 엔진]
+# [지지 저항선 분석 엔진]
 def calculate_sr_score(price, df):
     is_high = (df['high'] > df['high'].shift(1)) & (df['high'] > df['high'].shift(-1))
     is_low = (df['low'] < df['low'].shift(1)) & (df['low'] < df['low'].shift(-1))
     pivots_h = df[is_high][['high', 'vol']].copy()
     pivots_l = df[is_low][['low', 'vol']].copy()
+    
     near_h = pivots_h[(pivots_h['high'] - price).abs() / price < 0.007]
     near_l = pivots_l[(pivots_l['low'] - price).abs() / price < 0.007]
-    avg_vol = df['vol'].mean()
     
+    avg_vol = df['vol'].mean()
     sup_score = (len(near_l) * 20) + (near_l['vol'].max() / avg_vol * 10 if not near_l.empty else 0)
     res_score = (len(near_h) * 20) + (near_h['vol'].max() / avg_vol * 10 if not near_h.empty else 0)
+    
     score = sup_score - res_score
-    
-    # 원본 코드의 출력 구조에 맞춰 log_msg를 명확히 작성
-    log_msg = f"지지점수: {sup_score:.1f} / 저항점수: {res_score:.1f} | 500개 캔들 전수조사 완료"
-    
-    return score, list(near_l['low']), list(near_h['high']), log_msg
+    # 브리핑 내용이 상세하게 표기되도록 수정
+    logic_msg = f"지지선 {len(near_l)}개 감지(점수:{sup_score:.1f}), 저항선 {len(near_h)}개 감지(점수:{res_score:.1f})"
+    return score, list(near_l['low']), list(near_h['high']), logic_msg
 
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
@@ -155,7 +155,7 @@ for p in st.session_state.positions[:]:
         else: st.session_state.losses_total += abs(pnl_val)
         
         log_type = "자동" if st.session_state.auto_trading else "수동"
-        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 수익: {pnl_val:+.2f} USDT")
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 진입가: {p['entry']:.2f} | 수익: {pnl_val:+.2f} USDT")
         
         st.session_state.balance += (p['margin'] + pnl_val)
         st.session_state.positions.remove(p)
@@ -248,7 +248,7 @@ with st.container(border=True):
     else: status_col2.warning("⚪ 신호: 대기 중")
 
 # [섹션 분리: 매매 분석 엔진 및 상세 보기]
-st.subheader("매매 분석 엔진")
+st.subheader("지지 저항선 분석")
 with st.container(border=True):
     st.info("📊 현재 전략: 500개 캔들 분석")
     with st.expander("🔍 상세 브리핑 보기", expanded=True):
@@ -295,6 +295,6 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
 
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
-time.sleep(10.0)
+time.sleep(0.3)
 st.rerun()
 

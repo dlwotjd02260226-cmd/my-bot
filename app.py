@@ -123,16 +123,14 @@ total_score = 0
 analysis_summary = []
 strategy_tier = 1.5 
     for tf, t_weight in time_weights.items():
-        df = get_klines(tf, limit=500) # 50으로 줄여서 메모리 확보
+        df = get_klines(tf, limit=500)
         if df is not None and not df.empty:
             score, supports, resistances, log_msg = calculate_sr_score(price, df)
             final_score = score * strategy_tier * t_weight
             total_score += final_score
             analysis_summary.append((tf, final_score, supports, resistances, log_msg))
         
-        # [중요] 사용한 데이터 즉시 삭제
         del df
-        # [중요] 루프 사이 대기 시간
         time.sleep(0.3)
 
 # 자동 청산 로직

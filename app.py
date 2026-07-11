@@ -256,9 +256,11 @@ with st.container(border=True):
     ]
     active_strats = [s for s in strategies if s['detected']]
 
-    # 2. 현재 전략(제목) 및 감지된 전략 이름 실시간 표시
-    st.info("📊 현재 전략: 지지 저항 분석")
-    if active_strats:
+    # 2. 현재 전략 실시간 표시 (감지된 것이 없을 때 예외 처리)
+    if not active_strats:
+        st.info("📊 현재 전략: 감지된 매매 기법 없음")
+    else:
+        st.info("📊 현재 전략: 지지 저항 분석")
         for s in active_strats:
             st.markdown(f"**🔥 감지된 전략: {s['name']}**")
     
@@ -322,4 +324,3 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
 time.sleep(0.3)
 st.rerun()
-

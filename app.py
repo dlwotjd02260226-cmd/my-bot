@@ -4,9 +4,11 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
+import gc
 
-# [필수 엔진 함수]
-def get_klines(tf='1h', limit=50):
+# [수정됨: 메모리 관리를 위한 캐싱 및 200개 데이터 설정]
+@st.cache_data(ttl=60)
+def get_klines(tf='1h', limit=200):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)
@@ -121,18 +123,20 @@ components.html("""
 <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# [계산 로직 사전 실행]
-time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
+# [수정됨: 200개 데이터 사용 및 메모리 휘발성 관리 루프]
+time_weights = {'1W': 8.0, '1d': 4.0, '4h': 2.0}
 total_score = 0
 analysis_summary = []
 strategy_tier = 1.5 
 for tf, t_weight in time_weights.items():
-    df = get_klines(tf)
+    df = get_klines(tf, limit=200)
     if df is not None and not df.empty:
         score, supports, resistances, log_msg = calculate_sr_score(price, df)
         final_score = score * strategy_tier * t_weight
         total_score += final_score
         analysis_summary.append((tf, final_score, supports, resistances, log_msg))
+    del df
+    gc.collect()
 
 # 자동 청산 로직
 for p in st.session_state.positions[:]:
@@ -150,7 +154,6 @@ for p in st.session_state.positions[:]:
         else: st.session_state.losses_total += abs(pnl_val)
         
         log_type = "자동" if st.session_state.auto_trading else "수동"
-        # 상세 로그 기록
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 진입가: {p['entry']:.2f} | 수익: {pnl_val:+.2f} USDT")
         
         st.session_state.balance += (p['margin'] + pnl_val)
@@ -229,7 +232,6 @@ else:
                 set_msg(f"{p['type']} 포지션 정리 완료")
                 st.rerun()
 
-# [섹션 분리: 매매 점수와 신호]
 st.subheader("매매 신호 상태")
 with st.container(border=True):
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
@@ -243,7 +245,6 @@ with st.container(border=True):
     elif total_score <= -25: status_col2.error("🔴 숏 진입 신호")
     else: status_col2.warning("⚪ 신호: 대기 중")
 
-# [섹션 분리: 매매 분석 엔진 및 상세 보기]
 st.subheader("매매 분석 엔진")
 with st.container(border=True):
     st.info("📊 현재 전략: 매물대 분석")

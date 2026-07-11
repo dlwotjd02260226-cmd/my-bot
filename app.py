@@ -5,8 +5,8 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
 
-# [필수 엔진 함수]
-def get_klines(tf='1h', limit=50):
+# [필수 엔진 함수: 500개 데이터 호출로 변경]
+def get_klines(tf='1h', limit=500):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)
@@ -20,35 +20,34 @@ def get_klines(tf='1h', limit=50):
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
 
-# [우리가 만든 지능형 매물대 분석 로직으로 교체된 함수]
+# [지능형 매물대 분석 엔진 탑재]
 def calculate_sr_score(price, df):
-    supports = [df['low'].iloc[i] for i in range(5, len(df)-5) if df['low'].iloc[i] < df['low'].iloc[i-5:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+6].min()]
-    resistances = [df['high'].iloc[i] for i in range(5, len(df)-5) if df['high'].iloc[i] > df['high'].iloc[i-5:i].max() and df['high'].iloc[i] > df['high'].iloc[i+1:i+6].max()]
+    avg_vol = df['vol'].mean()
+    bins = pd.cut(df['close'], bins=50)
+    profile = df.groupby(bins)['vol'].sum()
     
     score = 0
     logic_msg = ""
-    avg_vol = df['vol'].mean()
     
-    for s in supports[-3:]:
-        if abs(price - s) / price < 0.005: 
-            bin_vol = df[(df['low'] >= s*0.997) & (df['low'] <= s*1.003)]['vol'].sum()
-            if bin_vol > avg_vol * 5:
-                score += 30 
-                logic_msg += f"강력 지지 {s:.2f} 근접. "
+    for interval, vol in profile.items():
+        if interval.left <= price <= interval.right:
+            if vol > avg_vol * 5:
+                # 강력한 변곡점 (흰색 선급)
+                if price < df['close'].mean():
+                    score += 30
+                    logic_msg += f"강력한 지지 구간입니다. 500개 캔들 내에서 거래량이 폭발하며 추세가 반전되었던 강력한 변곡점입니다."
+                else:
+                    score -= 30
+                    logic_msg += f"강력한 저항 구간입니다. 500개 캔들 내에서 거래량이 폭발하며 강한 추세 전환이 발생했던 자리입니다."
             else:
-                score += 10 
-                logic_msg += f"일반 지지 {s:.2f} 근접. "
-                
-    for r in resistances[-3:]:
-        if abs(price - r) / price < 0.005: 
-            bin_vol = df[(df['high'] >= r*0.997) & (df['high'] <= r*1.003)]['vol'].sum()
-            if bin_vol > avg_vol * 5:
-                score -= 30 
-                logic_msg += f"강력 저항 {r:.2f} 근접. "
-            else:
-                score -= 10 
-                logic_msg += f"일반 저항 {r:.2f} 근접. "
-    return score, supports, resistances, logic_msg
+                # 일반 매물대 (파란 선급)
+                if price < df['close'].mean():
+                    score += 10
+                    logic_msg += "일반 지지 구간입니다. 평범한 매물대가 형성되어 있습니다."
+                else:
+                    score -= 10
+                    logic_msg += "일반 저항 구간입니다. 평범한 매물대가 형성되어 있습니다."
+    return score, [], [], logic_msg
 
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
@@ -262,27 +261,10 @@ with st.container(border=True):
 # [섹션 분리: 매매 분석 엔진 및 상세 보기]
 st.subheader("매매 분석 엔진")
 with st.container(border=True):
-    st.info("📊 현재 전략: 매물대 분석")
-    with st.expander("🔍 상세 분석 보기", expanded=True):
-        strategies = [
-            {"name": "강력한 지지선 반등", "score": 15, "condition": lambda p, s, r: any(abs(p - sup) / p < 0.005 for sup in s), "desc": "강력한 지지선 근접."},
-            {"name": "저항선 돌파 실패", "score": -10, "condition": lambda p, s, r: any(abs(p - res) / p < 0.005 for res in r), "desc": "저항선 근접 및 돌파 실패."}
-        ]
-        active_strategies = []
+    st.info("📊 현재 전략: 500개 캔들 분석")
+    with st.expander("🔍 상세 브리핑 보기", expanded=True):
         for tf, f_score, sup, res, log in analysis_summary:
-            for strat in strategies:
-                if strat["condition"](price, sup, res):
-                    active_strategies.append((tf, strat))
-        if not active_strategies: st.write("현재 조건에 부합하는 매매 기법 없음.")
-        else:
-            for tf, strat in active_strategies:
-                st.markdown(f"**[{tf}] {strat['name']}**")
-        st.divider()
-        for tf, f_score, sup, res, log in analysis_summary:
-            st.write(f"📍 {tf} 타임프레임 요약")
-            c1, c2 = st.columns(2)
-            c1.table(pd.DataFrame(sup[-2:], columns=["지지"]))
-            c2.table(pd.DataFrame(res[-2:], columns=["저항"]))
+            st.write(f"📍 **[{tf}]** {log}")
 
 st.divider()
 st.subheader("수동 매매")
@@ -324,6 +306,6 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
 
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
-time.sleep(10.0)
+time.sleep(0.3)
 st.rerun()
 

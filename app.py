@@ -292,6 +292,6 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
 
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
-time.sleep(0.3)
+time.sleep(10)
 st.rerun()
 

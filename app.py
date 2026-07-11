@@ -35,6 +35,7 @@ def calculate_sr_score(price, df):
     res_score = (len(near_h) * 20) + (near_h['vol'].max() / avg_vol * 10 if not near_h.empty else 0)
     
     score = sup_score - res_score
+    # 브리핑 내용이 상세하게 표기되도록 수정
     logic_msg = f"지지선 {len(near_l)}개 감지(점수:{sup_score:.1f}), 저항선 {len(near_h)}개 감지(점수:{res_score:.1f})"
     return score, list(near_l['low']), list(near_h['high']), logic_msg
 
@@ -246,33 +247,13 @@ with st.container(border=True):
     elif total_score <= -25: status_col2.error("🔴 숏 진입 신호")
     else: status_col2.warning("⚪ 신호: 대기 중")
 
-# [수정된 섹션: 전략 감지 대시보드]
-strategies = [
-    {"name": "지지 저항 분석", "detected": (len(analysis_summary) > 0)},
-]
-active_strats = [s for s in strategies if s['detected']]
-
-st.subheader("현재 감지된 전략")
-if not active_strats:
-    st.write("⚪ 현재 감지된 전략 없음")
-else:
-    for s in active_strats:
-        st.markdown(f"**🔥 {s['name']}**")
-
-with st.expander("⚙️ 전체 매매 기법 리스트 보기"):
-    for strat in strategies:
-        col_s1, col_s2 = st.columns([0.8, 0.2])
-        col_s1.write(f"🔹 {strat['name']}")
-        if strat['detected']:
-            col_s2.markdown("🟢")
-
-if active_strats:
-    with st.expander("🔍 상세 브리핑 보기 (감지된 전략만)", expanded=True):
-        for s in active_strats:
-            st.write(f"### {s['name']}")
-            if s['name'] == "지지 저항 분석":
-                for tf, f_score, sup, res, log_msg in analysis_summary:
-                    st.write(f"📍 **[{tf}]** {log_msg}")
+# [섹션 분리: 매매 분석 엔진 및 상세 보기]
+st.subheader("지지 저항선 분석")
+with st.container(border=True):
+    st.info("📊 현재 전략: 500개 캔들 분석")
+    with st.expander("🔍 상세 브리핑 보기", expanded=True):
+        for tf, f_score, sup, res, log_msg in analysis_summary:
+            st.write(f"📍 **[{tf}]** {log_msg}")
 
 st.divider()
 st.subheader("수동 매매")
@@ -316,4 +297,3 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
 time.sleep(0.3)
 st.rerun()
-

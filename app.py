@@ -5,22 +5,23 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
 
-# [필수 엔진 함수] - 데이터 경량화 및 메모리 최적화 적용
-def get_klines(tf='1h', limit=500):
+# [필수 엔진 함수] - 스윙 매매를 위해 데이터 개수 조정
+def get_klines(tf='4h', limit=100):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)
         data = r.json().get('data', [])
         if not data: return None
         df = pd.DataFrame(data, columns=['ts', 'o', 'h', 'l', 'close', 'vol', 'confirm'])
-        # 분석에 필요한 컬럼만 추출하여 메모리 부하 최소화
-        df = df[['h', 'l', 'close']].astype(float)
+        df['close'] = df['close'].astype(float)
+        df['high'] = df['high'].astype(float)
+        df['low'] = df['low'].astype(float)
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
 
 def calculate_sr_score(price, df):
-    supports = [df['l'].iloc[i] for i in range(5, len(df)-5) if df['l'].iloc[i] < df['l'].iloc[i-5:i].min() and df['l'].iloc[i] < df['l'].iloc[i+1:i+6].min()]
-    resistances = [df['h'].iloc[i] for i in range(5, len(df)-5) if df['h'].iloc[i] > df['h'].iloc[i-5:i].max() and df['h'].iloc[i] > df['h'].iloc[i+1:i+6].max()]
+    supports = [df['low'].iloc[i] for i in range(5, len(df)-5) if df['low'].iloc[i] < df['low'].iloc[i-5:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+6].min()]
+    resistances = [df['high'].iloc[i] for i in range(5, len(df)-5) if df['high'].iloc[i] > df['high'].iloc[i-5:i].max() and df['high'].iloc[i] > df['high'].iloc[i+1:i+6].max()]
     score = 0
     logic_msg = ""
     for s in supports[-3:]:
@@ -69,6 +70,7 @@ if 'balance' not in st.session_state:
     st.session_state.wins_total = 0.0
     st.session_state.losses_total = 0.0
 
+# 메시지 알림 함수
 def set_msg(txt):
     st.session_state.msg_trigger = txt
     if "롱" in txt: st.session_state.msg_color = "#28a745"
@@ -76,6 +78,7 @@ def set_msg(txt):
     elif "부족" in txt or "종료" in txt: st.session_state.msg_color = "#dc3545"
     else: st.session_state.msg_color = "#333"
 
+# 시세 가져오기 함수
 def get_price():
     try:
         r = requests.get("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", timeout=2)
@@ -84,8 +87,10 @@ def get_price():
 
 price = get_price()
 
+# 제목
 st.markdown("<div style='font-size: 42px; font-weight: bold; margin-bottom: 20px;'>BTC 실시간 트레이딩</div>", unsafe_allow_html=True)
 
+# [설정 UI 영역]
 col_mode1, col_mode2 = st.columns(2)
 with col_mode1:
     mode_real = st.radio("매매 모드", ["가상 매매", "실전 매매"], key="is_real", horizontal=True)
@@ -109,26 +114,28 @@ lev = col1.number_input("레버리지 (1~125)", min_value=1, max_value=125, valu
 amt = col2.number_input("배팅 금액(USDT)", value=100.0)
 st.divider()
 
+# 차트 표시
 components.html("""
 <div id="tv"></div>
 <script src="https://s3.tradingview.com/tv.js"></script>
 <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# [계산 로직 사전 실행 - 메모리 휘발 최적화 적용]
-time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
+# [계산 로직 사전 실행 - 스윙 매매(주봉, 일봉, 4시간봉) 최적화]
+time_weights = {'1W': 8.0, '1d': 4.0, '4h': 2.0}
 total_score = 0
 analysis_summary = []
 strategy_tier = 1.5 
 for tf, t_weight in time_weights.items():
-    df = get_klines(tf, limit=500)
+    limit_val = 50 if tf == '1W' else 100
+    df = get_klines(tf, limit=limit_val)
     if df is not None and not df.empty:
         score, supports, resistances, log_msg = calculate_sr_score(price, df)
         final_score = score * strategy_tier * t_weight
         total_score += final_score
         analysis_summary.append((tf, final_score, supports, resistances, log_msg))
-    del df # [중요] 사용한 데이터 즉시 삭제하여 메모리 확보
-    time.sleep(0.3)
+    del df
+    time.sleep(0.5)
 
 # 자동 청산 로직
 for p in st.session_state.positions[:]:
@@ -224,6 +231,7 @@ else:
                 set_msg(f"{p['type']} 포지션 정리 완료")
                 st.rerun()
 
+# [섹션 분리: 매매 점수와 신호]
 st.subheader("매매 신호 상태")
 with st.container(border=True):
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
@@ -237,6 +245,7 @@ with st.container(border=True):
     elif total_score <= -25: status_col2.error("🔴 숏 진입 신호")
     else: status_col2.warning("⚪ 신호: 대기 중")
 
+# [섹션 분리: 매매 분석 엔진 및 상세 보기]
 st.subheader("매매 분석 엔진")
 with st.container(border=True):
     st.info("📊 현재 전략: 매물대 분석")
@@ -301,6 +310,6 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
 
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
-time.sleep(2.0) # [중요] 서버 과부하 방지 대기 시간
+time.sleep(2.0)
 st.rerun()
 

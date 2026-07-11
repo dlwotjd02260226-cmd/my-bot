@@ -20,35 +20,19 @@ def get_klines(tf='1h', limit=500):
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
 
-# [500개 캔들 기반 변곡점 분석 엔진 탑재]
+# [이식 완료: 500개 캔들 기반 변곡점 분석 엔진 탑재]
 def calculate_sr_score(price, df):
+    is_high = (df['high'] > df['high'].shift(1)) & (df['high'] > df['high'].shift(-1))
+    is_low = (df['low'] < df['low'].shift(1)) & (df['low'] < df['low'].shift(-1))
+    pivots_h = df[is_high][['high', 'vol']].copy()
+    pivots_l = df[is_low][['low', 'vol']].copy()
+    near_h = pivots_h[(pivots_h['high'] - price).abs() / price < 0.007]
+    near_l = pivots_l[(pivots_l['low'] - price).abs() / price < 0.007]
     avg_vol = df['vol'].mean()
-    bins = pd.cut(df['close'], bins=50)
-    profile = df.groupby(bins)['vol'].sum()
-    
-    score = 0
-    # 초기값을 설정하여 비어있지 않게 함
-    logic_msg = "현재 가격대에서 유의미한 거래량 매물대를 분석 중입니다."
-    
-    # 500개 데이터 기반 분석
-    for interval, vol in profile.items():
-        if interval.left <= price <= interval.right:
-            if vol > avg_vol * 5:
-                # 강력한 흰색 선급
-                if price < df['close'].mean():
-                    score += 30
-                    logic_msg = f"강력한 지지 구간입니다. 500개 캔들 내에서 거래량이 폭발하며 추세가 반전되었던 강력한 변곡점입니다."
-                else:
-                    score -= 30
-                    logic_msg = f"강력한 저항 구간입니다. 500개 캔들 내에서 거래량이 폭발하며 강한 추세 전환이 발생했던 자리입니다."
-            else:
-                # 일반 파란색 선급
-                if price < df['close'].mean():
-                    score += 10
-                    logic_msg = "일반 지지 구간입니다. 평범한 매물대가 형성되어 있습니다."
-                else:
-                    score -= 10
-                    logic_msg = "일반 저항 구간입니다. 평범한 매물대가 형성되어 있습니다."
+    sup_score = (len(near_l) * 20) + (near_l['vol'].max() / avg_vol * 10 if not near_l.empty else 0)
+    res_score = (len(near_h) * 20) + (near_h['vol'].max() / avg_vol * 10 if not near_h.empty else 0)
+    score = sup_score - res_score
+    logic_msg = f"변곡점 분석: 지지점수 {sup_score:.1f} / 저항점수 {res_score:.1f}. 꼭짓점 근거 기반 분석 완료."
     return score, [], [], logic_msg
 
 # 페이지 설정
@@ -309,4 +293,3 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
 time.sleep(0.3)
 st.rerun()
-

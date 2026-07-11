@@ -4,11 +4,9 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
-import gc
 
-# [수정됨: 메모리 관리를 위한 캐싱 및 200개 데이터 설정]
-@st.cache_data(ttl=60)
-def get_klines(tf='1h', limit=200):
+# [필수 엔진 함수]
+def get_klines(tf='1h', limit=50):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)
@@ -18,22 +16,38 @@ def get_klines(tf='1h', limit=200):
         df['close'] = df['close'].astype(float)
         df['high'] = df['high'].astype(float)
         df['low'] = df['low'].astype(float)
+        df['vol'] = df['vol'].astype(float)
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
 
+# [우리가 만든 지능형 매물대 분석 로직으로 교체된 함수]
 def calculate_sr_score(price, df):
     supports = [df['low'].iloc[i] for i in range(5, len(df)-5) if df['low'].iloc[i] < df['low'].iloc[i-5:i].min() and df['low'].iloc[i] < df['low'].iloc[i+1:i+6].min()]
     resistances = [df['high'].iloc[i] for i in range(5, len(df)-5) if df['high'].iloc[i] > df['high'].iloc[i-5:i].max() and df['high'].iloc[i] > df['high'].iloc[i+1:i+6].max()]
+    
     score = 0
     logic_msg = ""
+    avg_vol = df['vol'].mean()
+    
     for s in supports[-3:]:
         if abs(price - s) / price < 0.005: 
-            score += 3
-            logic_msg += f"지지선 {s:.2f} 근접. "
+            bin_vol = df[(df['low'] >= s*0.997) & (df['low'] <= s*1.003)]['vol'].sum()
+            if bin_vol > avg_vol * 5:
+                score += 30 
+                logic_msg += f"강력 지지 {s:.2f} 근접. "
+            else:
+                score += 10 
+                logic_msg += f"일반 지지 {s:.2f} 근접. "
+                
     for r in resistances[-3:]:
         if abs(price - r) / price < 0.005: 
-            score -= 3
-            logic_msg += f"저항선 {r:.2f} 근접. "
+            bin_vol = df[(df['high'] >= r*0.997) & (df['high'] <= r*1.003)]['vol'].sum()
+            if bin_vol > avg_vol * 5:
+                score -= 30 
+                logic_msg += f"강력 저항 {r:.2f} 근접. "
+            else:
+                score -= 10 
+                logic_msg += f"일반 저항 {r:.2f} 근접. "
     return score, supports, resistances, logic_msg
 
 # 페이지 설정
@@ -123,20 +137,18 @@ components.html("""
 <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
-# [수정됨: 200개 데이터 사용 및 메모리 휘발성 관리 루프]
-time_weights = {'1W': 8.0, '1d': 4.0, '4h': 2.0}
+# [계산 로직 사전 실행]
+time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
 total_score = 0
 analysis_summary = []
 strategy_tier = 1.5 
 for tf, t_weight in time_weights.items():
-    df = get_klines(tf, limit=200)
+    df = get_klines(tf)
     if df is not None and not df.empty:
         score, supports, resistances, log_msg = calculate_sr_score(price, df)
         final_score = score * strategy_tier * t_weight
         total_score += final_score
         analysis_summary.append((tf, final_score, supports, resistances, log_msg))
-    del df
-    gc.collect()
 
 # 자동 청산 로직
 for p in st.session_state.positions[:]:
@@ -154,6 +166,7 @@ for p in st.session_state.positions[:]:
         else: st.session_state.losses_total += abs(pnl_val)
         
         log_type = "자동" if st.session_state.auto_trading else "수동"
+        # 상세 로그 기록
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 진입가: {p['entry']:.2f} | 수익: {pnl_val:+.2f} USDT")
         
         st.session_state.balance += (p['margin'] + pnl_val)
@@ -208,7 +221,7 @@ if not st.session_state.positions:
     st.write("보유 포지션 없음")
 else:
     for i, p in enumerate(st.session_state.positions):
-        pnl = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
+        pnl = ((price - p['entry']) if p['type']=='롱' else (p['entry']-price))/p['entry']*p['margin']*p['lev']
         liq_price = p['entry'] * (1 - (1 / p['lev'])) if p['type'] == '롱' else p['entry'] * (1 + (1 / p['lev']))
         
         c_pos1, c_pos2 = st.columns([0.8, 0.2])
@@ -232,6 +245,7 @@ else:
                 set_msg(f"{p['type']} 포지션 정리 완료")
                 st.rerun()
 
+# [섹션 분리: 매매 점수와 신호]
 st.subheader("매매 신호 상태")
 with st.container(border=True):
     st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
@@ -245,6 +259,7 @@ with st.container(border=True):
     elif total_score <= -25: status_col2.error("🔴 숏 진입 신호")
     else: status_col2.warning("⚪ 신호: 대기 중")
 
+# [섹션 분리: 매매 분석 엔진 및 상세 보기]
 st.subheader("매매 분석 엔진")
 with st.container(border=True):
     st.info("📊 현재 전략: 매물대 분석")
@@ -311,3 +326,4 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
 time.sleep(10.0)
 st.rerun()
+

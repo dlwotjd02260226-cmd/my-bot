@@ -5,7 +5,7 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
 
-# [필수 엔진 함수: 500개 데이터 호출로 변경]
+# [필수 엔진 함수: 500개 캔들 호출로 변경]
 def get_klines(tf='1h', limit=500):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
@@ -20,7 +20,7 @@ def get_klines(tf='1h', limit=500):
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
 
-# [지능형 매물대 분석 엔진 탑재]
+# [500개 캔들 기반 변곡점 분석 엔진 탑재]
 def calculate_sr_score(price, df):
     avg_vol = df['vol'].mean()
     bins = pd.cut(df['close'], bins=50)
@@ -29,10 +29,10 @@ def calculate_sr_score(price, df):
     score = 0
     logic_msg = ""
     
+    # 500개 데이터 기반 분석
     for interval, vol in profile.items():
         if interval.left <= price <= interval.right:
             if vol > avg_vol * 5:
-                # 강력한 변곡점 (흰색 선급)
                 if price < df['close'].mean():
                     score += 30
                     logic_msg += f"강력한 지지 구간입니다. 500개 캔들 내에서 거래량이 폭발하며 추세가 반전되었던 강력한 변곡점입니다."
@@ -40,7 +40,6 @@ def calculate_sr_score(price, df):
                     score -= 30
                     logic_msg += f"강력한 저항 구간입니다. 500개 캔들 내에서 거래량이 폭발하며 강한 추세 전환이 발생했던 자리입니다."
             else:
-                # 일반 매물대 (파란 선급)
                 if price < df['close'].mean():
                     score += 10
                     logic_msg += "일반 지지 구간입니다. 평범한 매물대가 형성되어 있습니다."
@@ -165,7 +164,6 @@ for p in st.session_state.positions[:]:
         else: st.session_state.losses_total += abs(pnl_val)
         
         log_type = "자동" if st.session_state.auto_trading else "수동"
-        # 상세 로그 기록
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 진입가: {p['entry']:.2f} | 수익: {pnl_val:+.2f} USDT")
         
         st.session_state.balance += (p['margin'] + pnl_val)
@@ -263,8 +261,8 @@ st.subheader("매매 분석 엔진")
 with st.container(border=True):
     st.info("📊 현재 전략: 500개 캔들 분석")
     with st.expander("🔍 상세 브리핑 보기", expanded=True):
-        for tf, f_score, sup, res, log in analysis_summary:
-            st.write(f"📍 **[{tf}]** {log}")
+        for tf, f_score, sup, res, log_msg in analysis_summary:
+            st.write(f"📍 **[{tf}]** {log_msg}")
 
 st.divider()
 st.subheader("수동 매매")
@@ -308,4 +306,3 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
 time.sleep(0.3)
 st.rerun()
-

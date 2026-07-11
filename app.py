@@ -27,25 +27,28 @@ def calculate_sr_score(price, df):
     profile = df.groupby(bins)['vol'].sum()
     
     score = 0
-    logic_msg = ""
+    # 초기값을 설정하여 비어있지 않게 함
+    logic_msg = "현재 가격대에서 유의미한 거래량 매물대를 분석 중입니다."
     
     # 500개 데이터 기반 분석
     for interval, vol in profile.items():
         if interval.left <= price <= interval.right:
             if vol > avg_vol * 5:
+                # 강력한 흰색 선급
                 if price < df['close'].mean():
                     score += 30
-                    logic_msg += f"강력한 지지 구간입니다. 500개 캔들 내에서 거래량이 폭발하며 추세가 반전되었던 강력한 변곡점입니다."
+                    logic_msg = f"강력한 지지 구간입니다. 500개 캔들 내에서 거래량이 폭발하며 추세가 반전되었던 강력한 변곡점입니다."
                 else:
                     score -= 30
-                    logic_msg += f"강력한 저항 구간입니다. 500개 캔들 내에서 거래량이 폭발하며 강한 추세 전환이 발생했던 자리입니다."
+                    logic_msg = f"강력한 저항 구간입니다. 500개 캔들 내에서 거래량이 폭발하며 강한 추세 전환이 발생했던 자리입니다."
             else:
+                # 일반 파란색 선급
                 if price < df['close'].mean():
                     score += 10
-                    logic_msg += "일반 지지 구간입니다. 평범한 매물대가 형성되어 있습니다."
+                    logic_msg = "일반 지지 구간입니다. 평범한 매물대가 형성되어 있습니다."
                 else:
                     score -= 10
-                    logic_msg += "일반 저항 구간입니다. 평범한 매물대가 형성되어 있습니다."
+                    logic_msg = "일반 저항 구간입니다. 평범한 매물대가 형성되어 있습니다."
     return score, [], [], logic_msg
 
 # 페이지 설정
@@ -306,3 +309,4 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
 time.sleep(0.3)
 st.rerun()
+

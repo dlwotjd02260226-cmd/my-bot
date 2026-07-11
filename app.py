@@ -74,6 +74,7 @@ if 'balance' not in st.session_state:
     st.session_state.wins_total = 0.0
     st.session_state.losses_total = 0.0
 
+# 메시지 알림 함수
 def set_msg(txt):
     st.session_state.msg_trigger = txt
     if "롱" in txt: st.session_state.msg_color = "#28a745"
@@ -81,6 +82,7 @@ def set_msg(txt):
     elif "부족" in txt or "종료" in txt: st.session_state.msg_color = "#dc3545"
     else: st.session_state.msg_color = "#333"
 
+# 시세 가져오기 함수
 def get_price():
     try:
         r = requests.get("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", timeout=2)
@@ -94,8 +96,10 @@ st.markdown("<div style='font-size: 42px; font-weight: bold; margin-bottom: 20px
 
 # [설정 UI 영역]
 col_mode1, col_mode2 = st.columns(2)
-with col_mode1: mode_real = st.radio("매매 모드", ["가상 매매", "실전 매매"], key="is_real", horizontal=True)
-with col_mode2: mode_margin = st.radio("증거금 모드", ["격리 (Isolated)", "교차 (Cross)"], key="margin_mode", horizontal=True)
+with col_mode1:
+    mode_real = st.radio("매매 모드", ["가상 매매", "실전 매매"], key="is_real", horizontal=True)
+with col_mode2:
+    mode_margin = st.radio("증거금 모드", ["격리 (Isolated)", "교차 (Cross)"], key="margin_mode", horizontal=True)
 
 if mode_real == "실전 매매": st.error(f"🚨 실전 매매 모드 ({mode_margin}) 입니다.")
 else: st.success(f"✅ 가상 매매 모드 ({mode_margin}) 입니다.")
@@ -148,8 +152,10 @@ for p in st.session_state.positions[:]:
         pnl_val = ((price - p['entry'] if p['type']=='롱' else p['entry']-price)/p['entry'])*p['margin']*p['lev']
         if pnl_val > 0: st.session_state.wins_total += pnl_val
         else: st.session_state.losses_total += abs(pnl_val)
+        
         log_type = "자동" if st.session_state.auto_trading else "수동"
         st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_type}매매 | {p['type']} 포지션 {action} | 진입가: {p['entry']:.2f} | 수익: {pnl_val:+.2f} USDT")
+        
         st.session_state.balance += (p['margin'] + pnl_val)
         st.session_state.positions.remove(p)
         st.rerun()
@@ -240,33 +246,33 @@ with st.container(border=True):
     elif total_score <= -25: status_col2.error("🔴 숏 진입 신호")
     else: status_col2.warning("⚪ 신호: 대기 중")
 
-# [섹션 분리: 매매 분석 엔진 및 상세 보기]
-st.subheader("매매 전략 분석 대시보드")
-with st.container(border=True):
-    # 전략 목록 (이곳에 30개 이상의 기법을 추가하세요)
-    strategies = [
-        {"name": "지지 저항 분석", "detected": (len(analysis_summary) > 0)},
-    ]
-    
-    # 1. 전체 전략 상태 대시보드
-    with st.expander("⚙️ 전체 매매 기법 상태 보기", expanded=True):
-        for strat in strategies:
-            col_s1, col_s2 = st.columns([0.8, 0.2])
-            col_s1.write(f"🔹 {strat['name']}")
-            col_s2.markdown("🟢 감지" if strat['detected'] else "⚪ 관망")
+# [수정된 섹션: 전략 감지 대시보드]
+strategies = [
+    {"name": "지지 저항 분석", "detected": (len(analysis_summary) > 0)},
+]
+active_strats = [s for s in strategies if s['detected']]
 
-    # 2. 감지된 전략만 상세 브리핑 출력
-    st.markdown("---")
-    detected_strats = [s for s in strategies if s['detected']]
-    
-    if not detected_strats:
-        st.info("현재 모든 전략이 관망 중입니다.")
-    else:
-        for s in detected_strats:
-            with st.expander(f"✅ 신호 발생: {s['name']}", expanded=True):
-                if s['name'] == "지지 저항 분석":
-                    for tf, f_score, sup, res, log_msg in analysis_summary:
-                        st.write(f"📍 **[{tf}]** {log_msg}")
+st.subheader("현재 감지된 전략")
+if not active_strats:
+    st.write("⚪ 현재 감지된 전략 없음")
+else:
+    for s in active_strats:
+        st.markdown(f"**🔥 {s['name']}**")
+
+with st.expander("⚙️ 전체 매매 기법 리스트 보기"):
+    for strat in strategies:
+        col_s1, col_s2 = st.columns([0.8, 0.2])
+        col_s1.write(f"🔹 {strat['name']}")
+        if strat['detected']:
+            col_s2.markdown("🟢")
+
+if active_strats:
+    with st.expander("🔍 상세 브리핑 보기 (감지된 전략만)", expanded=True):
+        for s in active_strats:
+            st.write(f"### {s['name']}")
+            if s['name'] == "지지 저항 분석":
+                for tf, f_score, sup, res, log_msg in analysis_summary:
+                    st.write(f"📍 **[{tf}]** {log_msg}")
 
 st.divider()
 st.subheader("수동 매매")
@@ -310,3 +316,4 @@ st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
 time.sleep(0.3)
 st.rerun()
+

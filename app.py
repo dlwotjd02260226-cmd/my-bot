@@ -6,16 +6,14 @@ import streamlit.components.v1 as components
 import pandas as pd
 
 # [필수 엔진 함수 - 모든 타임프레임 500개 봉 데이터 호출]
-def get_klines(tf='1h', limit=500):
+def get_klines(tf='1h', limit=50):
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)
         data = r.json().get('data', [])
         if not data: return None
         df = pd.DataFrame(data, columns=['ts', 'o', 'h', 'l', 'close', 'vol', 'confirm'])
-        df['close'] = df['close'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
+        df = df[['h', 'l', 'close']].astype(float)
         return df.iloc[::-1].reset_index(drop=True)
     except: return None
 
@@ -125,13 +123,18 @@ time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
 total_score = 0
 analysis_summary = []
 strategy_tier = 1.5 
-for tf, t_weight in time_weights.items():
-    df = get_klines(tf, limit=500) # 500개 봉 데이터 호출
-    if df is not None and not df.empty:
-        score, supports, resistances, log_msg = calculate_sr_score(price, df)
-        final_score = score * strategy_tier * t_weight
-        total_score += final_score
-        analysis_summary.append((tf, final_score, supports, resistances, log_msg))
+    for tf, t_weight in time_weights.items():
+        df = get_klines(tf, limit=500) # 50으로 줄여서 메모리 확보
+        if df is not None and not df.empty:
+            score, supports, resistances, log_msg = calculate_sr_score(price, df)
+            final_score = score * strategy_tier * t_weight
+            total_score += final_score
+            analysis_summary.append((tf, final_score, supports, resistances, log_msg))
+        
+        # [중요] 사용한 데이터 즉시 삭제
+        del df
+        # [중요] 루프 사이 대기 시간
+        time.sleep(0.3)
 
 # 자동 청산 로직
 for p in st.session_state.positions[:]:
@@ -292,6 +295,6 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
 
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
-time.sleep(10)
+time.sleep(2.0)
 st.rerun()
 

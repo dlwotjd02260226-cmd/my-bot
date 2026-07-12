@@ -5,8 +5,12 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
 
+from data_hub import hub
+
 # [필수 엔진 함수: 500개 캔들 호출]
 def get_klines(tf='1h', limit=500):
+        cached = hub.get(f"klines_{tf}")
+    if cached is not None: return cached
     url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
     try:
         r = requests.get(url, timeout=2)

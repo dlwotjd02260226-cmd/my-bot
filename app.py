@@ -323,8 +323,9 @@ with st.container(border=True):
             st.markdown(f"**🔥 감지된 전략: {s['name']}**")
     
     # 3. 상세 분석 보기 (감지된 전략만 상세 설명)
+            
             with st.expander("🔍 상세 분석 보기", expanded=True):
-        if not active_strats:
+                if not active_strats:
             st.write("📈 **EMA 분석 상세**")
             for tf, msg, sc in ema_results:
                 if msg != "횡보":

@@ -319,7 +319,6 @@ with st.container(border=True):
     else: status_col2.warning("⚪ 신호: 대기 중")
 
 # [섹션 분리: 매매 분석 엔진 및 상세 보기]
-# [섹션 분리: 매매 분석 엔진 및 상세 보기]
 st.subheader("매매 분석 엔진")
 with st.container(border=True):
     # 감지 로직
@@ -343,7 +342,7 @@ with st.container(border=True):
                 st.markdown(f"---")
                 st.markdown(f"###### 🚩 기법: {s['name']}")
                 
-                # 상세 설명 전체 복구
+                # 1. EMA 200 추세 상세 설명
                 if s['name'] == "EMA 200 추세":
                     for tf, status, sc in ema200_results:
                         st.session_state.total_score += sc
@@ -354,6 +353,14 @@ with st.container(border=True):
                         st.write("<small>4. <b>횡보/변동성:</b> EMA 수렴 구간은 휩쏘의 위험이 매우 높으므로 진입을 자제하고 방향성 확정 후 재진입합니다.</small>", unsafe_allow_html=True)
                         st.write("<small>5. <b>익절 전략:</b> 직전 매물대에서 분할 익절하여 수익을 확정하고, 추세 강도가 약화되면 전량 청산합니다.</small>", unsafe_allow_html=True)
 
+                # 2. EMA 배열 상세 설명 (정배열/역배열/변곡점 구분)
+                elif s['name'] == "EMA 변곡점/정/역배열":
+                    st.write("<small>1. <b>현재 배열 상태:</b> 현재 EMA는 " + ("<b>정배열(상승장)</b> 상태입니다." if ema_total_score > 0 else "<b>역배열(하락장)</b> 상태입니다.") + "</small>", unsafe_allow_html=True)
+                    st.write("<small>2. <b>진입 및 대응:</b> " + ("정배열 시 가격이 EMA 지지를 받는 눌림목 구간에서 롱 진입을 노립니다." if ema_total_score > 0 else "역배열 시 가격이 EMA 저항을 받는 반등 구간에서 숏 진입을 노립니다.") + "</small>", unsafe_allow_html=True)
+                    st.write("<small>3. <b>변곡점(EMA 수렴):</b> EMA 이평선들이 한 점으로 모이는 구간은 에너지가 응축되는 <b>변곡점</b>입니다. 이 구간에서 급격한 방향 전환이 발생하므로 추격 매수를 자제합니다.</small>", unsafe_allow_html=True)
+                    st.write("<small>4. <b>리스크 관리:</b> 이평선 간격이 과도하게 벌어지면 기술적 반등(평균 회귀)이 일어날 수 있으니 익절을 우선시합니다.</small>", unsafe_allow_html=True)
+
+                # 3. 지지 저항 분석 상세 설명
                 elif s['name'] == "지지 저항 분석":
                     for tf, f_score, sup, res, log_msg in analysis_summary:
                         st.session_state.total_score += f_score
@@ -364,13 +371,16 @@ with st.container(border=True):
                         st.write("<small>4. <b>거래량 검증:</b> 거래량이 뒷받침되지 않은 돌파는 신뢰도가 낮으므로 진입 규모를 50% 이하로 낮추어 리스크를 관리합니다.</small>", unsafe_allow_html=True)
                         st.write(f"<small>5. <b>로그 분석:</b> {log_msg}</small>", unsafe_allow_html=True)
 
-    st.divider()
-    st.markdown("###### ⚙️ 전체 기법 리스트")
-    for strat in strategies:
-        col1, col2 = st.columns([0.8, 0.2])
-        col1.markdown(f"<small>◆ {strat['name']}</small>", unsafe_allow_html=True)
-        if strat.get('detected'):
-            col2.markdown("<small>🟢</small>", unsafe_allow_html=True)
+    # ⚙️ 전체 기법 리스트 (펼치기 모드 적용 + 녹색불 왼쪽 배치)
+    with st.expander("⚙️ 전체 기법 리스트"):
+        for strat in strategies:
+            col1, col2 = st.columns([0.15, 0.85])
+            if strat.get('detected'):
+                col1.markdown("<small>🟢</small>", unsafe_allow_html=True)
+                col2.markdown(f"<small>◆ {strat['name']}</small>", unsafe_allow_html=True)
+            else:
+                col1.markdown("", unsafe_allow_html=True)
+                col2.markdown(f"<small>◆ {strat['name']}</small>", unsafe_allow_html=True)
 
 
 st.divider()

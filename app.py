@@ -343,20 +343,21 @@ with st.container(border=True):
     
     # 3. 상세 분석 보기 (감지된 전략만 상세 설명)
         with st.expander("🔍 상세 분석 보기", expanded=True):
-                if not active_strats:
-        st.write("📈 **EMA 분석 상세**")
-                    for tf, msg, sc in ema_results:
-                        if msg != "횡보":
-                            st.write(f"📍 **[{tf}]** {msg} (가중점수: {sc:.1f})")
-                            st.write("---")
-                            st.write("현재 조건에 부합하는 매매 기법 없음.")
-                        else:
-                                    st.markdown("---")
-        st.write("📊 **EMA 200 추세 전략**")
-        for tf, status, sc in ema200_results:
-            st.write(f"📍 **[{tf}]** {status} (점수: {sc:+.1f})")
-        st.write(f"👉 **EMA 200 합산 점수: {ema200_total_score:+.1f}**")
+                        if not active_strats:
+                st.info("현재 감지된 전략 없음")
+            else:
+                st.write("📈 **EMA 분석 상세**")
+                for tf, msg, sc in ema_results:
+                    if msg != "횡보":
+                        st.write(f"📍 **[{tf}]** {msg} (가중점수: {sc:.1f})")
+                        st.write("---")
+                    else:
+                        st.markdown("---")
 
+            st.write("📊 **EMA 200 추세 전략**")
+            for tf, status, sc in ema200_results:
+                st.write(f"📍 **[{tf}]** {status} (점수: {sc:+.1f})")
+            st.write(f"👉 **EMA 200 합산 점수: {ema200_total_score:+.1f}**")
                             
                             for s in active_strats:
                                 if s['name'] == "지지 저항 분석":

@@ -342,6 +342,12 @@ with st.container(border=True):
             st.markdown(f"**🔥 감지된 전략: {s['name']}**")
     
     # 3. 상세 분석 보기 (점수 출력 삭제, 상세 이유 설명 위주)
+        # 1. 상단: 점수 반영 UI (감지된 전략에 따른 실시간 점수)
+        st.subheader("📊 매매 분석 현황")
+        total_score_display = ema200_total_score if 'ema200_total_score' in locals() else 0.0
+        st.metric(label="현재 종합 매매 점수", value=f"{total_score_display:+.1f}점")
+
+        # 2. 상세 분석 보기 (중복 점수 제거, 논리적 근거 상세 설명)
         with st.expander("🔍 상세 분석 보기", expanded=True):
             if not active_strats:
                 st.info("현재 감지된 전략 없음")
@@ -349,22 +355,24 @@ with st.container(border=True):
                 for s in active_strats:
                     st.markdown(f"🔥 **감지된 전략: {s['name']}**")
                     
-                    # 상세 이유만 출력 (점수 출력 제거)
                     if s['name'] == "EMA 200 추세" and 'ema200_results' in locals():
                         for tf, status, sc in ema200_results:
-                            st.write(f"📍 **{tf}**: {status}")
+                            # 상세 조건 문장 생성
+                            pos_desc = "롱 포지션 진입이 유리합니다" if sc > 0 else "숏 포지션 진입이 유리합니다"
+                            st.write(f"📍 **{tf} 차트**: 가격이 200 EMA 선 상단에 위치하여 {pos_desc}. (점수: {sc:+.1f})")
+                    
                     elif s['name'] == "지지 저항 분석" and 'analysis_summary' in locals():
                         for tf, f_score, sup, res, log_msg in analysis_summary:
-                            st.write(f"📍 **{tf}**: {log_msg}")
+                            st.write(f"📍 **{tf} 차트**: {log_msg}")
 
-        # 4. 전체 매매 기법 리스트 확인 (녹색불 이름 옆에 배치)
+        # 3. 전체 매매 기법 리스트 (이름 옆에 녹색불 배치)
         with st.expander("⚙️ 전체 매매 기법 리스트 확인"):
             for strat in strategies:
                 col1, col2 = st.columns([0.8, 0.2])
                 col1.write(f"◆ {strat['name']}")
+                # 감지된 항목만 이름 오른쪽 옆에 🟢 표시
                 if strat.get('detected'):
-                    col2.write("🟢")
-
+                    col2.markdown("🟢")
 
 st.divider()
 st.subheader("수동 매매")

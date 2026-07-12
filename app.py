@@ -322,22 +322,20 @@ with st.container(border=True):
 # [섹션 분리: 매매 분석 엔진 및 상세 보기]
 st.subheader("매매 분석 엔진")
 with st.container(border=True):
-    # 1. 전략 리스트 정의
+    # 감지 로직
     strategies = [
         {"name": "지지 저항 분석", "detected": (len(analysis_summary) > 0)},
         {"name": "거래량 분석", "detected": (len(analysis_summary) > 0)},
         {"name": "EMA 변곡점/정/역배열", "detected": (abs(ema_total_score) > 0)},
-        {"name": "EMA 200 추세", "detected": True},
+        {"name": "EMA 200 추세", "detected": (len(ema200_results) > 0)},
     ]
     detected_strats = [s for s in strategies if s.get('detected')]
 
-    # 2. 메인 전략 표시 (글자 크기 축소)
     current_name = detected_strats[0]['name'] if detected_strats else "대기 중"
     st.markdown(f"#### 📊 현재 전략: {current_name}")
 
-    # 3. 상세 분석 보기 (펼치기 기능 + 상세 문구 유지 + 글자 크기 축소)
     with st.expander("🔍 상세 분석 및 전체 기법 현황", expanded=True):
-        st.markdown("###### 📋 감지된 기법 상세 대응 매뉴얼")
+        st.markdown("###### 📋 감지된 기법 상세 내용")
         if not detected_strats:
             st.info("현재 감지된 전략 없음")
         else:
@@ -345,33 +343,34 @@ with st.container(border=True):
                 st.markdown(f"---")
                 st.markdown(f"###### 🚩 기법: {s['name']}")
                 
+                # 상세 설명 전체 복구
                 if s['name'] == "EMA 200 추세":
                     for tf, status, sc in ema200_results:
                         st.session_state.total_score += sc
-                        st.write(f"<small>**[시간대: {tf}]**</small>", unsafe_allow_html=True)
-                        st.write("<small>1. **추세 판단:** 현재 가격은 200 EMA " + ("상단에 위치하여 상승 추세가 강력합니다." if sc > 0 else "하단에 위치하여 하락 추세가 강력합니다.") + "</small>", unsafe_allow_html=True)
-                        st.write("<small>2. **진입 원칙:** 추세 방향에 따라 " + ("롱 포지션(매수) 진입을 수행합니다." if sc > 0 else "숏 포지션(매도) 진입을 수행합니다.") + "</small>", unsafe_allow_html=True)
-                        st.write("<small>3. **손절 대응:** 200 EMA " + ("하향 이탈 시" if sc > 0 else "상향 돌파 시") + " 추세 훼손으로 간주하고 즉시 포지션을 종료합니다.</small>", unsafe_allow_html=True)
-                        st.write("<small>4. **횡보/변동성:** EMA 수렴 구간은 휩쏘의 위험이 매우 높으므로 진입을 자제하고 방향성 확정 후 재진입합니다.</small>", unsafe_allow_html=True)
-                        st.write("<small>5. **익절 전략:** 직전 매물대에서 분할 익절하여 수익을 확정하고, 추세 강도가 약화되면 전량 청산합니다.</small>", unsafe_allow_html=True)
+                        st.write(f"<small><b>[시간대: {tf}]</b></small>", unsafe_allow_html=True)
+                        st.write("<small>1. <b>추세 판단:</b> 현재 가격은 200 EMA " + ("상단에 위치하여 상승 추세가 강력합니다." if sc > 0 else "하단에 위치하여 하락 추세가 강력합니다.") + "</small>", unsafe_allow_html=True)
+                        st.write("<small>2. <b>진입 원칙:</b> 추세 방향에 따라 " + ("롱 포지션(매수) 진입을 수행합니다." if sc > 0 else "숏 포지션(매도) 진입을 수행합니다.") + "</small>", unsafe_allow_html=True)
+                        st.write("<small>3. <b>손절 대응:</b> 200 EMA " + ("하향 이탈 시" if sc > 0 else "상향 돌파 시") + " 추세 훼손으로 간주하고 즉시 포지션을 종료합니다.</small>", unsafe_allow_html=True)
+                        st.write("<small>4. <b>횡보/변동성:</b> EMA 수렴 구간은 휩쏘의 위험이 매우 높으므로 진입을 자제하고 방향성 확정 후 재진입합니다.</small>", unsafe_allow_html=True)
+                        st.write("<small>5. <b>익절 전략:</b> 직전 매물대에서 분할 익절하여 수익을 확정하고, 추세 강도가 약화되면 전량 청산합니다.</small>", unsafe_allow_html=True)
 
                 elif s['name'] == "지지 저항 분석":
                     for tf, f_score, sup, res, log_msg in analysis_summary:
                         st.session_state.total_score += f_score
-                        st.write(f"<small>**[시간대: {tf}]**</small>", unsafe_allow_html=True)
-                        st.write("<small>1. **현재 상황:** 지지선 " + str(sup) + ", 저항선 " + str(res) + " 사이에서 시장 변동성을 확인했습니다.</small>", unsafe_allow_html=True)
-                        st.write("<small>2. **돌파 시나리오:** " + ("저항선을 상향 돌파하면 강한 매수세가 예상되므로 롱 진입합니다." if f_score > 0 else "지지선을 하향 이탈하면 강한 매도세가 예상되므로 숏 진입합니다.") + "</small>", unsafe_allow_html=True)
-                        st.write("<small>3. **리테스트:** 돌파 후 해당 지지/저항선을 다시 테스트할 때 지지받지 못하면 '가짜 돌파(휩쏘)'로 간주하고 즉시 손절.</small>", unsafe_allow_html=True)
-                        st.write("<small>4. **거래량 검증:** 거래량이 뒷받침되지 않은 돌파는 신뢰도가 낮으므로 진입 규모를 50% 이하로 낮추어 리스크를 관리합니다.</small>", unsafe_allow_html=True)
-                        st.write("<small>5. **로그 분석:** " + log_msg + "</small>", unsafe_allow_html=True)
+                        st.write(f"<small><b>[시간대: {tf}]</b></small>", unsafe_allow_html=True)
+                        st.write(f"<small>1. <b>현재 상황:</b> 지지선 {sup}, 저항선 {res} 사이에서 시장 변동성을 확인했습니다.</small>", unsafe_allow_html=True)
+                        st.write(f"<small>2. <b>돌파 시나리오:</b> {'저항 상향 돌파 시 롱 진입' if f_score > 0 else '지지 하향 이탈 시 숏 진입'}.</small>", unsafe_allow_html=True)
+                        st.write("<small>3. <b>리테스트:</b> 돌파 후 해당 지지/저항선을 다시 테스트할 때 지지받지 못하면 '가짜 돌파(휩쏘)'로 간주하고 즉시 손절합니다.</small>", unsafe_allow_html=True)
+                        st.write("<small>4. <b>거래량 검증:</b> 거래량이 뒷받침되지 않은 돌파는 신뢰도가 낮으므로 진입 규모를 50% 이하로 낮추어 리스크를 관리합니다.</small>", unsafe_allow_html=True)
+                        st.write(f"<small>5. <b>로그 분석:</b> {log_msg}</small>", unsafe_allow_html=True)
 
-    # 4. 전체 기법 리스트 (이름 옆에 녹색점 배치 + 글자 크기 축소)
+    st.divider()
     st.markdown("###### ⚙️ 전체 기법 리스트")
     for strat in strategies:
-        c1, c2 = st.columns([0.9, 0.1])
-        c1.markdown(f"<small>◆ {strat['name']}</small>", unsafe_allow_html=True)
+        col1, col2 = st.columns([0.8, 0.2])
+        col1.markdown(f"<small>◆ {strat['name']}</small>", unsafe_allow_html=True)
         if strat.get('detected'):
-            c2.markdown("<small>🟢</small>", unsafe_allow_html=True)
+            col2.markdown("<small>🟢</small>", unsafe_allow_html=True)
 
 
 st.divider()

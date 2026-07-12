@@ -323,7 +323,7 @@ with st.container(border=True):
             st.markdown(f"**🔥 감지된 전략: {s['name']}**")
     
     # 3. 상세 분석 보기 (감지된 전략만 상세 설명)
-            with st.expander("🔍 상세 분석 보기", expanded=True):
+        with st.expander("🔍 상세 분석 보기", expanded=True):
                 if not active_strats:
             st.write("📈 **EMA 분석 상세**")
             for tf, msg, sc in ema_results:
@@ -331,12 +331,12 @@ with st.container(border=True):
                     st.write(f"📍 **[{tf}]** {msg} (가중점수: {sc:.1f})")
             st.write("---")
             st.write("현재 조건에 부합하는 매매 기법 없음.")
-                else:
+        else:
             for s in active_strats:
                 if s['name'] == "지지 저항 분석":
                     for tf, f_score, sup, res, log_msg in analysis_summary:
                         st.write(f"📍 **[{tf}]** {log_msg}")
-                        
+
     # 4. 전체 매매 기법 관리 (펼쳐보기)
     with st.expander("⚙️ 전체 매매 기법 리스트 확인"):
         for strat in strategies:

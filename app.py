@@ -346,30 +346,26 @@ with st.container(border=True):
             if not active_strats:
                 st.info("현재 감지된 전략 없음")
             else:
-                st.write("📈 **EMA 분석 상세**")
-                for tf, msg, sc in ema_results:
-                    if msg != "횡보":
-                        st.write(f"📍 **[{tf}]** {msg} (가중점수: {sc:.1f})")
-                        st.write("---")
-                    else:
-                        st.markdown("---")
+                for s in active_strats:
+                    st.markdown(f"🔥 **감지된 전략: {s['name']}**")
+                    if s['name'] == "지지 저항 분석":
+                        for tf, f_score, sup, res, log_msg in analysis_summary:
+                            st.write(f"  📍 [{tf}] {log_msg}")
+                    elif s['name'] == "EMA 200 추세":
+                        for tf, status, sc in ema200_results:
+                            st.write(f"  📍 [{tf}] {status} (점수: {sc:+.1f})")
+                        st.write(f"  👉 **합산 점수: {ema200_total_score:+.1f}**")
+            
+            st.markdown("---")
+            st.write("📈 **전체 매매 종합 점수:**", f"### {ema200_total_score:+.1f}")
 
-            st.write("📊 **EMA 200 추세 전략**")
-            for tf, status, sc in ema200_results:
-                st.write(f"📍 **[{tf}]** {status} (점수: {sc:+.1f})")
-            st.write(f"👉 **EMA 200 합산 점수: {ema200_total_score:+.1f}**")
-            for s in active_strats:
-                if s['name'] == "지지 저항 분석":
-                    for tf, f_score, sup, res, log_msg in analysis_summary:
-                        st.write(f"📍 **[{tf}]** {log_msg}")
-
-    # 4. 전체 매매 기법 관리 (펼쳐보기)
-    with st.expander("⚙️ 전체 매매 기법 리스트 확인"):
-        for strat in strategies:
-            col_s1, col_s2 = st.columns([0.8, 0.2])
-            col_s1.write(f"🔹 {strat['name']}")
-            if strat['detected']:
-                col_s2.markdown("🟢")
+        # 4. 전체 매매 기법 리스트 확인
+        with st.expander("⚙️ 전체 매매 기법 리스트 확인"):
+            for strat in strategies:
+                col_s1, col_s2 = st.columns([0.8, 0.2])
+                col_s1.write(f"◆ {strat['name']}")
+                if strat['detected']:
+                    col_s2.markdown("🟢")
 
 st.divider()
 st.subheader("수동 매매")

@@ -268,6 +268,8 @@ with st.container(border=True):
     # 1. 감지된 전략들 리스트 (이곳에 추후 기법들을 30개 이상 추가하세요)
     strategies = [
         {"name": "지지 저항 분석", "detected": (len(analysis_summary) > 0)},
+        {"name": "거래량 분석", "detected": (len(analysis_summary) > 0)},
+
     ]
     active_strats = [s for s in strategies if s['detected']]
 

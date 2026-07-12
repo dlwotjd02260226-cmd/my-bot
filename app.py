@@ -29,7 +29,7 @@ def calculate_sr_score(price, df):
     pivots_l = df[is_low][['low', 'vol']].copy()
     
     near_h = pivots_h[(pivots_h['high'] - price).abs() / price < 0.007]
-    near_l = pivots_l[(pivots_l['low'] - price).abs() / price < 0.007]
+    near_l = pivo5.ts_l[(pivots_l['low'] - price).abs() / price < 0.007]
     
     avg_vol = df['vol'].mean()
     sup_score = (len(near_l) * 20) + (near_l['vol'].max() / avg_vol * 10 if not near_l.empty else 0)

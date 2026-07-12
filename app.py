@@ -342,30 +342,36 @@ with st.container(border=True):
             st.markdown(f"**🔥 감지된 전략: {s['name']}**")
     
     # 3. 상세 분석 보기 (감지된 전략만 상세 설명)
+        # 3. 상세 분석 보기
         with st.expander("🔍 상세 분석 보기", expanded=True):
             if not active_strats:
                 st.info("현재 감지된 전략 없음")
             else:
                 for s in active_strats:
                     st.markdown(f"🔥 **감지된 전략: {s['name']}**")
+                    
                     if s['name'] == "지지 저항 분석":
                         for tf, f_score, sup, res, log_msg in analysis_summary:
                             st.write(f"  📍 [{tf}] {log_msg}")
+                            
                     elif s['name'] == "EMA 200 추세":
-                        for tf, status, sc in ema200_results:
-                            st.write(f"  📍 [{tf}] {status} (점수: {sc:+.1f})")
-                        st.write(f"  👉 **합산 점수: {ema200_total_score:+.1f}**")
+                        # 상세 데이터가 있을 때만 출력하고 없으면 메시지라도 출력
+                        if 'ema200_results' in locals() and ema200_results:
+                            for tf, status, sc in ema200_results:
+                                st.write(f"  📍 [{tf}] {status} (점수: {sc:+.1f})")
+                        st.write(f"  👉 **현재 합산 점수: {ema200_total_score:+.1f}**")
             
             st.markdown("---")
-            st.write("📈 **전체 매매 종합 점수:**", f"### {ema200_total_score:+.1f}")
+            st.write("📈 **최종 매매 종합 점수:**", f"### {ema200_total_score:+.1f}")
 
-        # 4. 전체 매매 기법 리스트 확인
+        # 4. 전체 매매 기법 리스트 확인 (녹색불 정렬 수정)
         with st.expander("⚙️ 전체 매매 기법 리스트 확인"):
             for strat in strategies:
-                col_s1, col_s2 = st.columns([0.8, 0.2])
-                col_s1.write(f"◆ {strat['name']}")
-                if strat['detected']:
-                    col_s2.markdown("🟢")
+                col1, col2 = st.columns([0.8, 0.2])
+                col1.write(f"◆ {strat['name']}")
+                if strat.get('detected', False):
+                    col2.markdown("🟢")
+
 
 st.divider()
 st.subheader("수동 매매")

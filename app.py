@@ -324,10 +324,10 @@ with st.container(border=True):
     
     # 3. 상세 분석 보기 (감지된 전략만 상세 설명)
             with st.expander("🔍 상세 분석 보기", expanded=True):
-                if not active_strats:
+                    if not active_strats:
             st.write("📈 **EMA 분석 상세**")
             for tf, msg, sc in ema_results:
-                if msg != "횡보":
+                    if msg != "횡보":
                     st.write(f"📍 **[{tf}]** {msg} (가중점수: {sc:.1f})")
             st.write("---")
             st.write("현재 조건에 부합하는 매매 기법 없음.")

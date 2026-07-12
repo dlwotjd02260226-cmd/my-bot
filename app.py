@@ -190,7 +190,24 @@ for tf, t_weight in time_weights.items():
 
 ema_engine = EMASignalEngine()
 ema_total_score, ema_results = ema_engine.get_ema_analysis()
-total_score += ema_total_score
+# --- [EMA 200 추세 기법 추가] ---
+ema200_results = []
+ema200_total_score = 0
+ema200_weights = {'1M': 4.0, '1W': 3.0, '1d': 2.0, '4h': 1.0, '1h': 1.0}
+ema200_limits = {'1M': 12, '1W': 52, '1d': 365, '4h': 500, '1h': 500}
+
+for tf, weight in ema200_weights.items():
+    df = get_klines(tf, limit=ema200_limits[tf])
+    if df is not None and len(df) >= 200:
+        ema200 = df['close'].ewm(span=200, adjust=False).mean().iloc[-1]
+        is_uptrend = price > ema200
+        score = 2 if is_uptrend else -1
+        w_score = score * weight
+        ema200_total_score += w_score
+        ema200_results.append((tf, "상향" if is_uptrend else "하향", w_score))
+
+total_score += ema200_total_score 
+# ------------------------------
 
 
 # 자동 청산 로직
@@ -309,6 +326,8 @@ with st.container(border=True):
         {"name": "지지 저항 분석", "detected": (len(analysis_summary) > 0)},
         {"name": "거래량 분석", "detected": (len(analysis_summary) > 0)},
         {"name": "EMA 변곡점/정/역배열", "detected": (abs(ema_total_score) > 0)},
+        {"name": "EMA 200 추세", "detected": True},
+
 
 
     ]
@@ -325,13 +344,19 @@ with st.container(border=True):
     # 3. 상세 분석 보기 (감지된 전략만 상세 설명)
         with st.expander("🔍 상세 분석 보기", expanded=True):
                 if not active_strats:
-                    st.write("📈 **EMA 분석 상세**")
+        st.write("📈 **EMA 분석 상세**")
                     for tf, msg, sc in ema_results:
                         if msg != "횡보":
                             st.write(f"📍 **[{tf}]** {msg} (가중점수: {sc:.1f})")
                             st.write("---")
                             st.write("현재 조건에 부합하는 매매 기법 없음.")
                         else:
+                                    st.markdown("---")
+        st.write("📊 **EMA 200 추세 전략**")
+        for tf, status, sc in ema200_results:
+            st.write(f"📍 **[{tf}]** {status} (점수: {sc:+.1f})")
+        st.write(f"👉 **EMA 200 합산 점수: {ema200_total_score:+.1f}**")
+
                             
                             for s in active_strats:
                                 if s['name'] == "지지 저항 분석":

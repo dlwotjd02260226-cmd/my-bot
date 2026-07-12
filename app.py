@@ -343,7 +343,7 @@ with st.container(border=True):
     
     # 3. 상세 분석 보기 (감지된 전략만 상세 설명)
         with st.expander("🔍 상세 분석 보기", expanded=True):
-                        if not active_strats:
+            if not active_strats:
                 st.info("현재 감지된 전략 없음")
             else:
                 st.write("📈 **EMA 분석 상세**")

@@ -349,28 +349,23 @@ with st.container(border=True):
             else:
                 for s in active_strats:
                     st.markdown(f"🔥 **감지된 전략: {s['name']}**")
-                    
-                    if s['name'] == "지지 저항 분석":
+                    if s['name'] == "지지 저항 분석" and 'analysis_summary' in locals():
                         for tf, f_score, sup, res, log_msg in analysis_summary:
-                            st.write(f"  📍 [{tf}] {log_msg}")
-                            
-                    elif s['name'] == "EMA 200 추세":
-                        # 상세 데이터가 있을 때만 출력하고 없으면 메시지라도 출력
-                        if 'ema200_results' in locals() and ema200_results:
-                            for tf, status, sc in ema200_results:
-                                st.write(f"  📍 [{tf}] {status} (점수: {sc:+.1f})")
-                        st.write(f"  👉 **현재 합산 점수: {ema200_total_score:+.1f}**")
+                            st.write(f"📍 [{tf}] {log_msg}")
+                    elif s['name'] == "EMA 200 추세" and 'ema200_results' in locals():
+                        for tf, status, sc in ema200_results:
+                            st.write(f"📍 [{tf}] {status} (점수: {sc:+.1f})")
             
             st.markdown("---")
-            st.write("📈 **최종 매매 종합 점수:**", f"### {ema200_total_score:+.1f}")
+            st.write(f"📈 **최종 매매 종합 점수: {ema200_total_score:+.1f}**")
 
-        # 4. 전체 매매 기법 리스트 확인 (녹색불 정렬 수정)
+        # 4. 전체 매매 기법 리스트 확인
         with st.expander("⚙️ 전체 매매 기법 리스트 확인"):
             for strat in strategies:
-                col1, col2 = st.columns([0.8, 0.2])
-                col1.write(f"◆ {strat['name']}")
-                if strat.get('detected', False):
-                    col2.markdown("🟢")
+                c1, c2 = st.columns([0.8, 0.2])
+                c1.write(f"◆ {strat['name']}")
+                if strat.get('detected'):
+                    c2.markdown("🟢")
 
 
 st.divider()

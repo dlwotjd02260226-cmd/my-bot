@@ -39,6 +39,18 @@ def calculate_sr_score(price, df):
     logic_msg = f"지지선 {len(near_l)}개 감지(점수:{sup_score:.1f}), 저항선 {len(near_h)}개 감지(점수:{res_score:.1f})"
     return score, list(near_l['low']), list(near_h['high']), logic_msg
 
+def calculate_volume_score(df):
+    avg_vol = df['vol'].mean()
+    last_vol = df.iloc[-1]['vol']
+    ratio = last_vol / avg_vol
+    if ratio < 0.9:
+        score = 0
+    else:
+        score = min((ratio - 0.9) * 100, 100)
+    msg = f"거래량 점수: {score:.1f}점 (평균 대비 {ratio:.2f}배)"
+    return score, msg
+
+
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
 
@@ -134,9 +146,12 @@ strategy_tier = 1.5
 for tf, t_weight in time_weights.items():
     df = get_klines(tf)
     if df is not None and not df.empty:
-        score, supports, resistances, log_msg = calculate_sr_score(price, df)
-        final_score = score * strategy_tier * t_weight
+        score_sr, supports, resistances, log_msg_sr = calculate_sr_score(price, df)
+        score_vol, log_msg_vol = calculate_volume_score(df)
+        
+        final_score = (score_sr + score_vol) * strategy_tier * t_weight
         total_score += final_score
+        log_msg = f"{log_msg_sr} | {log_msg_vol}"
         analysis_summary.append((tf, final_score, supports, resistances, log_msg))
 
 # 자동 청산 로직

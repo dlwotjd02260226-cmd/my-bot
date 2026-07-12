@@ -50,6 +50,40 @@ def calculate_volume_score(df):
     msg = f"거래량 점수: {score:.1f}점 (평균 대비 {ratio:.2f}배)"
     return score, msg
 
+# [ema변곡.정.역배열]
+class EMASignalEngine:
+    def __init__(self):
+        self.weights = {'1M': 5.0, '1W': 4.0, '1d': 3.0, '4h': 2.0, '1h': 1.0}
+    
+    def calculate_ema_status(self, df):
+        e20 = df['close'].rolling(20).mean().iloc[-1]
+        e60 = df['close'].rolling(60).mean().iloc[-1]
+        e120 = df['close'].rolling(120).mean().iloc[-1]
+        e200 = df['close'].rolling(200).mean().iloc[-1]
+        
+        is_bullish = (e20 > e60 > e120 > e200)
+        is_bearish = (e200 > e120 > e60 > e20)
+        gap = abs(e20 - e200) / e200
+        
+        if 0.001 <= gap < 0.005: return "EMA 변곡점", 2
+        elif gap >= 0.005:
+            if is_bullish: return "EMA 정배열", 8
+            elif is_bearish: return "EMA 역배열", -8
+        return "횡보", 0
+
+    def get_ema_analysis(self):
+        results = []
+        total_score = 0
+        for tf in ['1h', '4h', '1d', '1W', '1M']:
+            df = get_klines(tf)
+            if df is not None:
+                msg, score = self.calculate_ema_status(df)
+                weighted_score = score * self.weights.get(tf, 1)
+                total_score += weighted_score
+                results.append((tf, msg, weighted_score))
+        return total_score, results
+
+
 
 # 페이지 설정
 st.set_page_config(page_title="BTC Bot", layout="centered")
@@ -153,6 +187,11 @@ for tf, t_weight in time_weights.items():
         total_score += final_score
         log_msg = f"{log_msg_sr} | {log_msg_vol}"
         analysis_summary.append((tf, final_score, supports, resistances, log_msg))
+
+ema_engine = EMASignalEngine()
+ema_total_score, ema_results = ema_engine.get_ema_analysis()
+total_score += ema_total_score
+
 
 # 자동 청산 로직
 for p in st.session_state.positions[:]:
@@ -269,6 +308,8 @@ with st.container(border=True):
     strategies = [
         {"name": "지지 저항 분석", "detected": (len(analysis_summary) > 0)},
         {"name": "거래량 분석", "detected": (len(analysis_summary) > 0)},
+        {"name": "EMA 변곡점/정/역배열", "detected": (abs(ema_total_score) > 0)},
+
 
     ]
     active_strats = [s for s in strategies if s['detected']]
@@ -284,6 +325,13 @@ with st.container(border=True):
     # 3. 상세 분석 보기 (감지된 전략만 상세 설명)
     with st.expander("🔍 상세 분석 보기", expanded=True):
         if not active_strats:
+                    # EMA 상세 분석 출력
+        st.write("📈 **EMA 분석 상세**")
+        for tf, msg, sc in ema_results:
+            if msg != "횡보":
+                st.write(f"📍 **[{tf}]** {msg} (가중점수: {sc:.1f})")
+        st.write("---")
+
             st.write("현재 조건에 부합하는 매매 기법 없음.")
         else:
             for s in active_strats:

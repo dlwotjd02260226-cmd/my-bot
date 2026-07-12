@@ -358,11 +358,10 @@ with st.container(border=True):
             for tf, status, sc in ema200_results:
                 st.write(f"📍 **[{tf}]** {status} (점수: {sc:+.1f})")
             st.write(f"👉 **EMA 200 합산 점수: {ema200_total_score:+.1f}**")
-                            
-                            for s in active_strats:
-                                if s['name'] == "지지 저항 분석":
-                                    for tf, f_score, sup, res, log_msg in analysis_summary:
-                                        st.write(f"📍 **[{tf}]** {log_msg}")
+            for s in active_strats:
+                if s['name'] == "지지 저항 분석":
+                    for tf, f_score, sup, res, log_msg in analysis_summary:
+                        st.write(f"📍 **[{tf}]** {log_msg}")
 
     # 4. 전체 매매 기법 관리 (펼쳐보기)
     with st.expander("⚙️ 전체 매매 기법 리스트 확인"):

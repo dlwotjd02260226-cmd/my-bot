@@ -87,3 +87,23 @@ def get_dynamic_ema200_score(price, df):
     
     status = "상승 추세(롱 우세)" if is_above else "하락 추세(숏 우세)"
     return long_score, short_score, status
+
+
+
+# [strategy.py 수정: 모든 기법을 이 표준 형식으로 작성]
+def get_ema200_report(price, df):
+    ema200 = df['close'].ewm(span=200, adjust=False).mean().iloc[-1]
+    is_above = price > ema200
+    score = 2 if is_above else -2
+    msg = f"현재 가격은 200 EMA {'상단' if is_above else '하단'}에 위치하여 {'롱' if is_above else '숏'} 우세함."
+    return {"name": "EMA 200 추세", "score": score, "msg": msg}
+
+def get_sr_report(price, df):
+    score, sups, res, log_msg = calculate_sr_score(price, df)
+    if score == 0: return None
+    return {"name": "지지/저항 분석", "score": score, "msg": log_msg}
+
+def get_volume_report(df):
+    score, msg = calculate_volume_score(df)
+    if score == 0: return None
+    return {"name": "거래량 분석", "score": score, "msg": msg}

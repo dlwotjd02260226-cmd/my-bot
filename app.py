@@ -107,7 +107,9 @@ components.html("""
 """, height=260)
 
 
-# [통합 매매 분석 엔진]
+# [계산 로직 사전 실행]
+
+# [새로운 통합 매매 분석 엔진]
 strategy_list = [
     {"func": strategy.get_ema200_report, "name": "EMA 200 추세"},
     {"func": strategy.get_sr_report, "name": "지지/저항 분석"},
@@ -117,12 +119,12 @@ strategy_list = [
 active_reports = []
 df_1h = get_data_from_file('1h')
 
-# 데이터 유효성 검사 (에러 방지)
-if df_1h is not None and not df_1h.empty:
-    for s in strategy_list:
-        if s["name"] == "거래량 분석": report = s["func"](df_1h)
-        else: report = s["func"](price, df_1h)
-        if report: active_reports.append(report)
+for s in strategy_list:
+    # 기법 함수 호출 (거래량 분석은 DF만, 나머지는 가격+DF)
+    if s["name"] == "거래량 분석": report = s["func"](df_1h)
+    else: report = s["func"](price, df_1h)
+    
+    if report: active_reports.append(report)
 
 total_score = sum(r["score"] for r in active_reports)
 
@@ -224,24 +226,21 @@ else:
                 set_msg(f"{p['type']} 포지션 정리 완료")
                 st.rerun()
 
-# [출력부 코드]
-st.subheader("매매 분석 엔진")
-if not active_reports:
-    st.info("현재 감지된 신호 없음")
-else:
-    for idx, r in enumerate(active_reports):
-        st.write(f"**{idx+1}. {r['name']}** (점수: {r['score']:+})")
-        st.write(f"- 상세: {r['msg']}")
+# [섹션 분리: 매매 점수와 신호]
+st.subheader("매매 신호 상태")
+with st.container(border=True):
+    st.markdown(f"<p style='font-size: 24px; font-weight: bold;'>📊 종합 매매 점수: {total_score:.1f}점</p>", unsafe_allow_html=True)
+    status_col1, status_col2 = st.columns(2)
+    if st.session_state.positions:
+        p = st.session_state.positions[0]
+        pnl_val = ((price - p['entry']) if p['type']=='롱' else (p['entry']-price)) / p['entry'] * 100
+        if pnl_val > 0: status_col2.success(f"🟢 익절 신호")
+        else: status_col2.error(f"🔴 손절 신호")
+    elif total_score >= 25: status_col2.success("🟢 롱 진입 신호")
+    elif total_score <= -25: status_col2.error("🔴 숏 진입 신호")
+    else: status_col2.warning("⚪ 신호: 대기 중")
 
-st.subheader("⚙️ 전체 기법 리스트")
-for s in strategy_list:
-    col1, col2 = st.columns([0.15, 0.85])
-    is_active = any(r['name'] == s['name'] for r in active_reports)
-    col1.markdown("🟢" if is_active else "⚪")
-    col2.markdown(s['name'])
-
-
-
+# [섹션 분리: 매매 분석 엔진 및 상세 보기]
 # [수정된 통합 매매 분석 엔진]
 strategy_list = [
     {"func": strategy.get_ema200_report, "name": "EMA 200 추세"},

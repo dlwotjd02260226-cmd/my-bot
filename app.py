@@ -241,21 +241,30 @@ with st.container(border=True):
     else: status_col2.warning("⚪ 신호: 대기 중")
 
 # [섹션 분리: 매매 분석 엔진 및 상세 보기]
-st.subheader("매매 분석 엔진")
-if not active_reports:
-    st.info("현재 감지된 신호 없음")
-else:
-    for idx, r in enumerate(active_reports):
-        st.write(f"**{idx+1}. {r['name']}** (점수: {r['score']:+})")
-        st.write(f"- 상세: {r['msg']}")
+# [수정된 통합 매매 분석 엔진]
+strategy_list = [
+    {"func": strategy.get_ema200_report, "name": "EMA 200 추세"},
+    {"func": strategy.get_sr_report, "name": "지지/저항 분석"},
+    {"func": strategy.get_volume_report, "name": "거래량 분석"},
+]
 
-st.subheader("⚙️ 전체 기법 리스트")
+active_reports = []
+# 1h 데이터를 정확히 가져옵니다
+df_1h = get_data_from_file('1h') 
+
 for s in strategy_list:
-    col1, col2 = st.columns([0.15, 0.85])
-    is_active = any(r['name'] == s['name'] for r in active_reports)
+    # 1. 거래량 분석은 df만 필요
+    if s["name"] == "거래량 분석":
+        report = s["func"](df_1h)
+    # 2. 나머지는 price와 df_1h를 둘 다 넘겨줍니다
+    else:
+        report = s["func"](price, df_1h)
     
-    col1.markdown("🟢" if is_active else "⚪") 
-    col2.markdown(s['name'])
+    if report: 
+        active_reports.append(report)
+
+total_score = sum(r["score"] for r in active_reports)
+
 
 
 

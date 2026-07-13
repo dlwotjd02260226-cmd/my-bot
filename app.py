@@ -108,27 +108,36 @@ components.html("""
 
 
 # [계산 로직 사전 실행]
+time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
+total_score = 0
+analysis_summary = []
+strategy_tier = 1.5 
+for tf, t_weight in time_weights.items():
+    df = get_data_from_file(tf) # 수정됨
+    if df is not None and not df.empty:
+        score_sr, supports, resistances, log_msg_sr = strategy.calculate_sr_score(price, df) # 수정됨
+        score_vol, log_msg_vol = strategy.calculate_volume_score(df) # 수정됨
+        
+        final_score = (score_sr + score_vol) * strategy_tier * t_weight
+        total_score += final_score
+        log_msg = f"{log_msg_sr} | {log_msg_vol}"
+        analysis_summary.append((tf, final_score, supports, resistances, log_msg))
 
-# [새로운 통합 매매 분석 엔진]
-strategy_list = [
-    {"func": strategy.get_ema200_report, "name": "EMA 200 추세"},
-    {"func": strategy.get_sr_report, "name": "지지/저항 분석"},
-    {"func": strategy.get_volume_report, "name": "거래량 분석"},
-]
-
-active_reports = []
-df_1h = get_data_from_file('1h')
-
-for s in strategy_list:
-    # 기법 함수 호출 (거래량 분석은 DF만, 나머지는 가격+DF)
-    if s["name"] == "거래량 분석": report = s["func"](df_1h)
-    else: report = s["func"](price, df_1h)
-    
-    if report: active_reports.append(report)
-
-total_score = sum(r["score"] for r in active_reports)
+ema_engine = strategy.EMASignalEngine() # 수정됨
+ema_total_score, ema_results = ema_engine.get_ema_analysis(get_data_from_file) # 수정됨
 
 
+# --- [EMA 200 추세 기법 추가] ---
+# 봇이 스스로 EMA 200을 감지하여 롱/숏 점수를 계산합니다.
+df_1h = get_data_from_file('1h') 
+long_score, short_score, status = strategy.get_dynamic_ema200_score(price, df_1h)
+
+# 봇이 판단한 가감점을 total_score에 반영
+total_score += (long_score + short_score)
+
+# 화면(사이드바)에 봇의 현재 감지 상태 표시
+st.sidebar.write(f"**EMA 200 감지:** {status}")
+st.sidebar.write(f"적용 점수(롱/숏): {long_score}/{short_score}")
 # ------------------------------
 
 
@@ -241,31 +250,66 @@ with st.container(border=True):
     else: status_col2.warning("⚪ 신호: 대기 중")
 
 # [섹션 분리: 매매 분석 엔진 및 상세 보기]
-# [수정된 통합 매매 분석 엔진]
-strategy_list = [
-    {"func": strategy.get_ema200_report, "name": "EMA 200 추세"},
-    {"func": strategy.get_sr_report, "name": "지지/저항 분석"},
-    {"func": strategy.get_volume_report, "name": "거래량 분석"},
-]
+st.subheader("매매 분석 엔진")
+with st.container(border=True):
+    # 감지 로직
+    strategies = [
+        {"name": "지지 저항 분석", "detected": (len(analysis_summary) > 0)},
+        {"name": "거래량 분석", "detected": (len(analysis_summary) > 0)},
+        {"name": "EMA 변곡점/정/역배열", "detected": (abs(ema_total_score) > 0)},
+        {"name": "EMA 200 추세", "detected": True},
+    ]
+    detected_strats = [s for s in strategies if s.get('detected')]
 
-active_reports = []
-# 1h 데이터를 정확히 가져옵니다
-df_1h = get_data_from_file('1h') 
+    current_name = detected_strats[0]['name'] if detected_strats else "대기 중"
+    st.markdown(f"#### 📊 현재 전략: {current_name}")
 
-for s in strategy_list:
-    # 1. 거래량 분석은 df만 필요
-    if s["name"] == "거래량 분석":
-        report = s["func"](df_1h)
-    # 2. 나머지는 price와 df_1h를 둘 다 넘겨줍니다
-    else:
-        report = s["func"](price, df_1h)
-    
-    if report: 
-        active_reports.append(report)
+    with st.expander("🔍 상세 분석 및 전체 기법 현황", expanded=True):
+        st.markdown("###### 📋 감지된 기법 상세 내용")
+        if not detected_strats:
+            st.info("현재 감지된 전략 없음")
+        else:
+            for s in detected_strats:
+                st.markdown(f"---")
+                st.markdown(f"###### 🚩 기법: {s['name']}")
+                
+                # 1. EMA 200 추세 상세 설명
+                if s['name'] == "EMA 200 추세":
+                    st.write(f"<small><b>현재 봇의 판단:</b> {status}</small>", unsafe_allow_html=True)
+                    st.write(f"<small>1. <b>추세 판단:</b> 현재 가격은 200 EMA {'상단' if '상승' in status else '하단'}에 위치하여 <b>{status}</b>입니다.</small>", unsafe_allow_html=True)
+                    st.write(f"<small>2. <b>진입 원칙:</b> {status} 방향에 맞춰 롱/숏 가점 및 감점을 실시간으로 적용합니다.</small>", unsafe_allow_html=True)
+                    st.write(f"<small>3. <b>손절 대응:</b> 200 EMA {'하향 이탈' if '상승' in status else '상향 돌파'} 시 추세 훼손으로 간주하고 포지션을 즉시 정리합니다.</small>", unsafe_allow_html=True)
+                    st.write("<small>4. <b>횡보/변동성:</b> EMA 근처 횡보 구간은 휩쏘 위험이 높으므로 방향성 확정 후 전략을 수행합니다.</small>", unsafe_allow_html=True)
+                    st.write("<small>5. <b>익절 전략:</b> 추세 가속 시 분할 익절하고, 가점 점수가 낮아지면 전량 청산하여 수익을 확보합니다.</small>", unsafe_allow_html=True)
+                
+                # 2. EMA 배열 상세 설명 (정배열/역배열/변곡점 구분)
+                elif s['name'] == "EMA 변곡점/정/역배열":
+                    st.write("<small>1. <b>현재 배열 상태:</b> 현재 EMA는 " + ("<b>정배열(상승장)</b> 상태입니다." if ema_total_score > 0 else "<b>역배열(하락장)</b> 상태입니다.") + "</small>", unsafe_allow_html=True)
+                    st.write("<small>2. <b>진입 및 대응:</b> " + ("정배열 시 가격이 EMA 지지를 받는 눌림목 구간에서 롱 진입을 노립니다." if ema_total_score > 0 else "역배열 시 가격이 EMA 저항을 받는 반등 구간에서 숏 진입을 노립니다.") + "</small>", unsafe_allow_html=True)
+                    st.write("<small>3. <b>변곡점(EMA 수렴):</b> EMA 이평선들이 한 점으로 모이는 구간은 에너지가 응축되는 <b>변곡점</b>입니다. 이 구간에서 급격한 방향 전환이 발생하므로 추격 매수를 자제합니다.</small>", unsafe_allow_html=True)
+                    st.write("<small>4. <b>리스크 관리:</b> 이평선 간격이 과도하게 벌어지면 기술적 반등(평균 회귀)이 일어날 수 있으니 익절을 우선시합니다.</small>", unsafe_allow_html=True)
 
-total_score = sum(r["score"] for r in active_reports)
+                # 3. 지지 저항 분석 상세 설명
+                elif s['name'] == "지지 저항 분석":
+                    for tf, f_score, sup, res, log_msg in analysis_summary:
+                        st.session_state.total_score += f_score
+                        st.write(f"<small><b>[시간대: {tf}]</b></small>", unsafe_allow_html=True)
+                        st.write(f"<small>1. <b>현재 상황:</b> 지지선 {sup}, 저항선 {res} 사이에서 시장 변동성을 확인했습니다.</small>", unsafe_allow_html=True)
+                        st.write(f"<small>2. <b>돌파 시나리오:</b> {'저항 상향 돌파 시 롱 진입' if f_score > 0 else '지지 하향 이탈 시 숏 진입'}.</small>", unsafe_allow_html=True)
+                        st.write("<small>3. <b>리테스트:</b> 돌파 후 해당 지지/저항선을 다시 테스트할 때 지지받지 못하면 '가짜 돌파(휩쏘)'로 간주하고 즉시 손절합니다.</small>", unsafe_allow_html=True)
+                        st.write("<small>4. <b>거래량 검증:</b> 거래량이 뒷받침되지 않은 돌파는 신뢰도가 낮으므로 진입 규모를 50% 이하로 낮추어 리스크를 관리합니다.</small>", unsafe_allow_html=True)
+                        st.write(f"<small>5. <b>로그 분석:</b> {log_msg}</small>", unsafe_allow_html=True)
 
-
+    # ⚙️ 전체 기법 리스트 (펼치기 모드 적용 + 녹색불 왼쪽 배치)
+    with st.expander("⚙️ 전체 기법 리스트"):
+        for strat in strategies:
+            col1, col2 = st.columns([0.15, 0.85])
+            if strat.get('detected'):
+                col1.markdown("<small>🟢</small>", unsafe_allow_html=True)
+                col2.markdown(f"<small>◆ {strat['name']}</small>", unsafe_allow_html=True)
+            else:
+                col1.markdown("", unsafe_allow_html=True)
+                col2.markdown(f"<small>◆ {strat['name']}</small>", unsafe_allow_html=True)
 
 
 st.divider()

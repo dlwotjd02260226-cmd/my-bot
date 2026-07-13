@@ -126,8 +126,9 @@ if df_1h is not None and not df_1h.empty:
 
 
 # 화면(사이드바)에 봇의 현재 감지 상태 표시
-st.sidebar.write(f"**EMA 200 감지:** {status}")
-st.sidebar.write(f"적용 점수(롱/숏): {long_score}/{short_score}")
+    st.sidebar.write(f"**EMA 200 감지:** {status}")
+    st.sidebar.write(f"**적용 점수(롱/숏):** {long_score}/{short_score}")
+
 # ------------------------------
 
 

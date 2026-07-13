@@ -4,6 +4,8 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
+import json
+import strategy
 
 # [필수 엔진 함수: 500개 캔들 호출]
 def get_klines(tf='1h', limit=500):

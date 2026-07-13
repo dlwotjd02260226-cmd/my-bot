@@ -1,15 +1,69 @@
 import pandas as pd
+import requests
 
-def calculate_signal(df):
-    # 여기에 원래 app.py에 있던 매매 로직(지지저항, 이평선 등)을 넣을 예정입니다.
-    # 현재는 테스트 단계이므로 간단한 점수 계산 로직을 넣어둡니다.
+# ========================================================
+# [이삿짐 도착] app.py에서 가져온 분석 로직들
+# ========================================================
+
+# 1. 원본 코드: 지지 저항선 분석 엔진
+def calculate_sr_score(price, df):
+    is_high = (df['high'] > df['high'].shift(1)) & (df['high'] > df['high'].shift(-1))
+    is_low = (df['low'] < df['low'].shift(1)) & (df['low'] < df['low'].shift(-1))
+    pivots_h = df[is_high][['high', 'vol']].copy()
+    pivots_l = df[is_low][['low', 'vol']].copy()
     
-    # 예시: 가격 정보를 활용한 간단한 분석
-    current_price = df['close'].iloc[0]
+    near_h = pivots_h[(pivots_h['high'] - price).abs() / price < 0.007]
+    near_l = pivots_l[(pivots_l['low'] - price).abs() / price < 0.007]
     
-    # 여기서 매매 기법을 계산하고 결과(신호)를 반환합니다.
-    # 나중에 여기에 실시간 지지/저항 로직을 다 옮길 거예요.
-    signal = "HOLD" # 매수/매도/관망
-    score = 0
+    avg_vol = df['vol'].mean()
+    sup_score = (len(near_l) * 20) + (near_l['vol'].max() / avg_vol * 10 if not near_l.empty else 0)
+    res_score = (len(near_h) * 20) + (near_h['vol'].max() / avg_vol * 10 if not near_h.empty else 0)
     
-    return signal, score
+    score = sup_score - res_score
+    logic_msg = f"지지선 {len(near_l)}개 감지(점수:{sup_score:.1f}), 저항선 {len(near_h)}개 감지(점수:{res_score:.1f})"
+    return score, list(near_l['low']), list(near_h['high']), logic_msg
+
+# 2. 원본 코드: 거래량 분석
+def calculate_volume_score(df):
+    avg_vol = df['vol'].mean()
+    last_vol = df.iloc[-1]['vol']
+    ratio = last_vol / avg_vol
+    if ratio < 0.9:
+        score = 0
+    else:
+        score = min((ratio - 0.9) * 100, 100)
+    msg = f"거래량 점수: {score:.1f}점 (평균 대비 {ratio:.2f}배)"
+    return score, msg
+
+# 3. 원본 코드: EMA 분석 엔진
+class EMASignalEngine:
+    def __init__(self):
+        self.weights = {'1M': 5.0, '1W': 4.0, '1d': 3.0, '4h': 2.0, '1h': 1.0}
+    
+    def calculate_ema_status(self, df):
+        e20 = df['close'].rolling(20).mean().iloc[-1]
+        e60 = df['close'].rolling(60).mean().iloc[-1]
+        e120 = df['close'].rolling(120).mean().iloc[-1]
+        e200 = df['close'].rolling(200).mean().iloc[-1]
+        
+        is_bullish = (e20 > e60 > e120 > e200)
+        is_bearish = (e200 > e120 > e60 > e20)
+        gap = abs(e20 - e200) / e200
+        
+        if 0.001 <= gap < 0.005: return "EMA 변곡점", 2
+        elif gap >= 0.005:
+            if is_bullish: return "EMA 정배열", 8
+            elif is_bearish: return "EMA 역배열", -8
+        return "횡보", 0
+
+    def get_ema_analysis(self, get_klines_func):
+        results = []
+        total_score = 0
+        for tf in ['1h', '4h', '1d', '1W', '1M']:
+            df = get_klines_func(tf)
+            if df is not None:
+                msg, score = self.calculate_ema_status(df)
+                weighted_score = score * self.weights.get(tf, 1)
+                total_score += weighted_score
+                results.append((tf, msg, weighted_score))
+        return total_score, results

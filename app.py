@@ -106,34 +106,24 @@ components.html("""
 <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
+# [계산 로직 통합]
+strategy_list = [
+    {"func": strategy.get_ema200_report, "name": "EMA 200 추세"},
+    {"func": strategy.get_sr_report, "name": "지지/저항 분석"},
+    {"func": strategy.get_volume_report, "name": "거래량 분석"},
+]
 
-# [계산 로직 사전 실행]
-time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
+active_reports = []
 total_score = 0
-analysis_summary = []
-strategy_tier = 1.5 
-for tf, t_weight in time_weights.items():
-    df = get_data_from_file(tf) # 수정됨
-    if df is not None and not df.empty:
-        score_sr, supports, resistances, log_msg_sr = strategy.calculate_sr_score(price, df) # 수정됨
-        score_vol, log_msg_vol = strategy.calculate_volume_score(df) # 수정됨
-        
-        final_score = (score_sr + score_vol) * strategy_tier * t_weight
-        total_score += final_score
-        log_msg = f"{log_msg_sr} | {log_msg_vol}"
-        analysis_summary.append((tf, final_score, supports, resistances, log_msg))
+df_1h = get_data_from_file('1h')
 
-ema_engine = strategy.EMASignalEngine() # 수정됨
-ema_total_score, ema_results = ema_engine.get_ema_analysis(get_data_from_file) # 수정됨
+if df_1h is not None and not df_1h.empty:
+    for s in strategy_list:
+        report = s["func"](price, df_1h) if s["name"] != "거래량 분석" else s["func"](df_1h)
+        if report:
+            active_reports.append(report)
+            total_score += report['score']
 
-
-# --- [EMA 200 추세 기법 추가] ---
-# 봇이 스스로 EMA 200을 감지하여 롱/숏 점수를 계산합니다.
-df_1h = get_data_from_file('1h') 
-long_score, short_score, status = strategy.get_dynamic_ema200_score(price, df_1h)
-
-# 봇이 판단한 가감점을 total_score에 반영
-total_score += (long_score + short_score)
 
 # 화면(사이드바)에 봇의 현재 감지 상태 표시
 st.sidebar.write(f"**EMA 200 감지:** {status}")
@@ -300,15 +290,17 @@ with st.container(border=True):
                         st.write("<small>4. <b>거래량 검증:</b> 거래량이 뒷받침되지 않은 돌파는 신뢰도가 낮으므로 진입 규모를 50% 이하로 낮추어 리스크를 관리합니다.</small>", unsafe_allow_html=True)
                         st.write(f"<small>5. <b>로그 분석:</b> {log_msg}</small>", unsafe_allow_html=True)
 
-    # ⚙️ 전체 기법 리스트 (펼치기 모드 적용 + 녹색불 왼쪽 배치)
+    
+    # ⚙️ 전체 기법 리스트 (펼치기 모드 적용 + 파란색 강조)
     with st.expander("⚙️ 전체 기법 리스트"):
         for strat in strategies:
             col1, col2 = st.columns([0.15, 0.85])
             if strat.get('detected'):
-                col1.markdown("<small>🟢</small>", unsafe_allow_html=True)
-                col2.markdown(f"<small>◆ {strat['name']}</small>", unsafe_allow_html=True)
+                # 녹색 불 제거, 감지된 기법 이름 파란색으로 표시
+                col1.markdown("") 
+                col2.markdown(f"<small>:blue[◆ {strat['name']}]</small>", unsafe_allow_html=True)
             else:
-                col1.markdown("", unsafe_allow_html=True)
+                col1.markdown("")
                 col2.markdown(f"<small>◆ {strat['name']}</small>", unsafe_allow_html=True)
 
 

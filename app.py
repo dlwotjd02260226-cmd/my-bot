@@ -7,85 +7,16 @@ import pandas as pd
 import json
 import strategy
 
-# [필수 엔진 함수: 500개 캔들 호출]
-def get_klines(tf='1h', limit=500):
-        
-    url = f"https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar={tf}&limit={limit}"
+# [데이터 파일에서 읽기: get_klines 대신 사용]
+def get_data_from_file(tf='1h', limit=500):
     try:
-        r = requests.get(url, timeout=2)
-        data = r.json().get('data', [])
-        if not data: return None
-        df = pd.DataFrame(data, columns=['ts', 'o', 'h', 'l', 'close', 'vol', 'confirm'])
-        df['close'] = df['close'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
-        df['vol'] = df['vol'].astype(float)
-        return df.iloc[::-1].reset_index(drop=True)
-    except: return None
-
-# [지지 저항선 분석 엔진]
-def calculate_sr_score(price, df):
-    is_high = (df['high'] > df['high'].shift(1)) & (df['high'] > df['high'].shift(-1))
-    is_low = (df['low'] < df['low'].shift(1)) & (df['low'] < df['low'].shift(-1))
-    pivots_h = df[is_high][['high', 'vol']].copy()
-    pivots_l = df[is_low][['low', 'vol']].copy()
-    
-    near_h = pivots_h[(pivots_h['high'] - price).abs() / price < 0.007]
-    near_l = pivo5.ts_l[(pivots_l['low'] - price).abs() / price < 0.007]
-    
-    avg_vol = df['vol'].mean()
-    sup_score = (len(near_l) * 20) + (near_l['vol'].max() / avg_vol * 10 if not near_l.empty else 0)
-    res_score = (len(near_h) * 20) + (near_h['vol'].max() / avg_vol * 10 if not near_h.empty else 0)
-    
-    score = sup_score - res_score
-    # 브리핑 내용이 상세하게 표기되도록 수정
-    logic_msg = f"지지선 {len(near_l)}개 감지(점수:{sup_score:.1f}), 저항선 {len(near_h)}개 감지(점수:{res_score:.1f})"
-    return score, list(near_l['low']), list(near_h['high']), logic_msg
-
-def calculate_volume_score(df):
-    avg_vol = df['vol'].mean()
-    last_vol = df.iloc[-1]['vol']
-    ratio = last_vol / avg_vol
-    if ratio < 0.9:
-        score = 0
-    else:
-        score = min((ratio - 0.9) * 100, 100)
-    msg = f"거래량 점수: {score:.1f}점 (평균 대비 {ratio:.2f}배)"
-    return score, msg
-
-# [ema변곡.정.역배열]
-class EMASignalEngine:
-    def __init__(self):
-        self.weights = {'1M': 5.0, '1W': 4.0, '1d': 3.0, '4h': 2.0, '1h': 1.0}
-    
-    def calculate_ema_status(self, df):
-        e20 = df['close'].rolling(20).mean().iloc[-1]
-        e60 = df['close'].rolling(60).mean().iloc[-1]
-        e120 = df['close'].rolling(120).mean().iloc[-1]
-        e200 = df['close'].rolling(200).mean().iloc[-1]
-        
-        is_bullish = (e20 > e60 > e120 > e200)
-        is_bearish = (e200 > e120 > e60 > e20)
-        gap = abs(e20 - e200) / e200
-        
-        if 0.001 <= gap < 0.005: return "EMA 변곡점", 2
-        elif gap >= 0.005:
-            if is_bullish: return "EMA 정배열", 8
-            elif is_bearish: return "EMA 역배열", -8
-        return "횡보", 0
-
-    def get_ema_analysis(self):
-        results = []
-        total_score = 0
-        for tf in ['1h', '4h', '1d', '1W', '1M']:
-            df = get_klines(tf)
-            if df is not None:
-                msg, score = self.calculate_ema_status(df)
-                weighted_score = score * self.weights.get(tf, 1)
-                total_score += weighted_score
-                results.append((tf, msg, weighted_score))
-        return total_score, results
-
+        with open("data.json", "r") as f:
+            data = json.load(f)
+            df = pd.DataFrame(data, columns=['ts', 'o', 'h', 'l', 'close', 'vol', 'confirm'])
+            df[['close', 'high', 'low', 'vol']] = df[['close', 'high', 'low', 'vol']].astype(float)
+            return df.iloc[::-1].reset_index(drop=True)
+    except:
+        return None
 
 
 # 페이지 설정
@@ -175,24 +106,26 @@ components.html("""
 <script>new TradingView.widget({"width":"100%","height":250,"symbol":"OKX:BTCUSDT","theme":"light","container_id":"tv"});</script>
 """, height=260)
 
+
 # [계산 로직 사전 실행]
 time_weights = {'1M': 16.0, '1W': 8.0, '1d': 4.0, '4h': 2.0, '1h': 1.0}
 total_score = 0
 analysis_summary = []
 strategy_tier = 1.5 
 for tf, t_weight in time_weights.items():
-    df = get_klines(tf)
+    df = get_data_from_file(tf) # 수정됨
     if df is not None and not df.empty:
-        score_sr, supports, resistances, log_msg_sr = calculate_sr_score(price, df)
-        score_vol, log_msg_vol = calculate_volume_score(df)
+        score_sr, supports, resistances, log_msg_sr = strategy.calculate_sr_score(price, df) # 수정됨
+        score_vol, log_msg_vol = strategy.calculate_volume_score(df) # 수정됨
         
         final_score = (score_sr + score_vol) * strategy_tier * t_weight
         total_score += final_score
         log_msg = f"{log_msg_sr} | {log_msg_vol}"
         analysis_summary.append((tf, final_score, supports, resistances, log_msg))
 
-ema_engine = EMASignalEngine()
-ema_total_score, ema_results = ema_engine.get_ema_analysis()
+ema_engine = strategy.EMASignalEngine() # 수정됨
+ema_total_score, ema_results = ema_engine.get_ema_analysis(get_data_from_file) # 수정됨
+
 # --- [EMA 200 추세 기법 추가] ---
 ema200_results = []
 ema200_total_score = 0
@@ -200,7 +133,7 @@ ema200_weights = {'1M': 4.0, '1W': 3.0, '1d': 2.0, '4h': 1.0, '1h': 1.0}
 ema200_limits = {'1M': 12, '1W': 52, '1d': 365, '4h': 500, '1h': 500}
 
 for tf, weight in ema200_weights.items():
-    df = get_klines(tf, limit=ema200_limits[tf])
+    df = get_data_from_file(tf, limit=ema200_limits[tf]) # 수정됨
     if df is not None and len(df) >= 200:
         ema200 = df['close'].ewm(span=200, adjust=False).mean().iloc[-1]
         is_uptrend = price > ema200
@@ -211,6 +144,7 @@ for tf, weight in ema200_weights.items():
 
 total_score += ema200_total_score 
 # ------------------------------
+
 
 
 # 자동 청산 로직

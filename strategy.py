@@ -67,3 +67,23 @@ class EMASignalEngine:
                 total_score += weighted_score
                 results.append((tf, msg, weighted_score))
         return total_score, results
+
+# [strategy.py 파일 맨 아래에 추가]
+
+def get_dynamic_ema200_score(price, df):
+    """
+    기존 로직과 별개로 작동하는 EMA 200 가감점 판단 엔진
+    """
+    if df is None or len(df) < 200:
+        return 0, 0, "데이터 부족"
+        
+    ema200 = df['close'].ewm(span=200, adjust=False).mean().iloc[-1]
+    is_above = price > ema200
+    
+    # 롱 포지션 점수: 위에 있으면 가점(+2), 아래면 감점(-2)
+    # 숏 포지션 점수: 아래에 있으면 가점(+2), 위에 있으면 감점(-2)
+    long_score = 2 if is_above else -2
+    short_score = 2 if not is_above else -2
+    
+    status = "상승 추세(롱 우세)" if is_above else "하락 추세(숏 우세)"
+    return long_score, short_score, status

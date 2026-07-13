@@ -274,7 +274,7 @@ with st.container(border=True):
                 st.markdown(f"###### 🚩 기법: {s['name']}")
                 
                 # 1. EMA 200 추세 상세 설명
-                                if s['name'] == "EMA 200 추세":
+                if s['name'] == "EMA 200 추세":
                     st.write(f"<small><b>현재 봇의 판단:</b> {status}</small>", unsafe_allow_html=True)
                     st.write(f"<small>1. <b>추세 판단:</b> 현재 가격은 200 EMA {'상단' if '상승' in status else '하단'}에 위치하여 <b>{status}</b>입니다.</small>", unsafe_allow_html=True)
                     st.write(f"<small>2. <b>진입 원칙:</b> {status} 방향에 맞춰 롱/숏 가점 및 감점을 실시간으로 적용합니다.</small>", unsafe_allow_html=True)

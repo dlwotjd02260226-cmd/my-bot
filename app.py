@@ -126,25 +126,19 @@ for tf, t_weight in time_weights.items():
 ema_engine = strategy.EMASignalEngine() # 수정됨
 ema_total_score, ema_results = ema_engine.get_ema_analysis(get_data_from_file) # 수정됨
 
+
 # --- [EMA 200 추세 기법 추가] ---
-ema200_results = []
-ema200_total_score = 0
-ema200_weights = {'1M': 4.0, '1W': 3.0, '1d': 2.0, '4h': 1.0, '1h': 1.0}
-ema200_limits = {'1M': 12, '1W': 52, '1d': 365, '4h': 500, '1h': 500}
+# 봇이 스스로 EMA 200을 감지하여 롱/숏 점수를 계산합니다.
+df_1h = get_data_from_file('1h') 
+long_score, short_score, status = strategy.get_dynamic_ema200_score(price, df_1h)
 
-for tf, weight in ema200_weights.items():
-    df = get_data_from_file(tf, limit=ema200_limits[tf]) # 수정됨
-    if df is not None and len(df) >= 200:
-        ema200 = df['close'].ewm(span=200, adjust=False).mean().iloc[-1]
-        is_uptrend = price > ema200
-        score = 2 if is_uptrend else -1
-        w_score = score * weight
-        ema200_total_score += w_score
-        ema200_results.append((tf, "상향" if is_uptrend else "하향", w_score))
+# 봇이 판단한 가감점을 total_score에 반영
+total_score += (long_score + short_score)
 
-total_score += ema200_total_score 
+# 화면(사이드바)에 봇의 현재 감지 상태 표시
+st.sidebar.write(f"**EMA 200 감지:** {status}")
+st.sidebar.write(f"적용 점수(롱/숏): {long_score}/{short_score}")
 # ------------------------------
-
 
 
 # 자동 청산 로직

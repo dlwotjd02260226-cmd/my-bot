@@ -107,3 +107,27 @@ def get_volume_report(df):
     score, msg = calculate_volume_score(df)
     if score == 0: return None
     return {"name": "거래량 분석", "score": score, "msg": msg}
+
+
+
+
+# [strategy.py 맨 아래에 추가]
+def get_ema200_report(price, df):
+    if df is None or 'close' not in df.columns: return None
+    ema200 = df['close'].ewm(span=200, adjust=False).mean().iloc[-1]
+    is_above = price > ema200
+    score = 2 if is_above else -2
+    msg = f"현재 가격은 200 EMA {'상단' if is_above else '하단'}에 위치하여 {'롱' if is_above else '숏'} 우세함."
+    return {"name": "EMA 200 추세", "score": score, "msg": msg}
+
+def get_sr_report(price, df):
+    if df is None: return None
+    score, sups, res, log_msg = calculate_sr_score(price, df)
+    if score == 0: return None
+    return {"name": "지지/저항 분석", "score": score, "msg": log_msg}
+
+def get_volume_report(df):
+    if df is None: return None
+    score, msg = calculate_volume_score(df)
+    if score == 0: return None
+    return {"name": "거래량 분석", "score": score, "msg": msg}

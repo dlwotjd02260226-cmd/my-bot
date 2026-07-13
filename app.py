@@ -257,7 +257,7 @@ with st.container(border=True):
         {"name": "지지 저항 분석", "detected": (len(analysis_summary) > 0)},
         {"name": "거래량 분석", "detected": (len(analysis_summary) > 0)},
         {"name": "EMA 변곡점/정/역배열", "detected": (abs(ema_total_score) > 0)},
-        {"name": "EMA 200 추세", "detected": (len(ema200_results) > 0)},
+        {"name": "EMA 200 추세", "detected": True},
     ]
     detected_strats = [s for s in strategies if s.get('detected')]
 
@@ -274,16 +274,14 @@ with st.container(border=True):
                 st.markdown(f"###### 🚩 기법: {s['name']}")
                 
                 # 1. EMA 200 추세 상세 설명
-                if s['name'] == "EMA 200 추세":
-                    for tf, status, sc in ema200_results:
-                        st.session_state.total_score += sc
-                        st.write(f"<small><b>[시간대: {tf}]</b></small>", unsafe_allow_html=True)
-                        st.write("<small>1. <b>추세 판단:</b> 현재 가격은 200 EMA " + ("상단에 위치하여 상승 추세가 강력합니다." if sc > 0 else "하단에 위치하여 하락 추세가 강력합니다.") + "</small>", unsafe_allow_html=True)
-                        st.write("<small>2. <b>진입 원칙:</b> 추세 방향에 따라 " + ("롱 포지션(매수) 진입을 수행합니다." if sc > 0 else "숏 포지션(매도) 진입을 수행합니다.") + "</small>", unsafe_allow_html=True)
-                        st.write("<small>3. <b>손절 대응:</b> 200 EMA " + ("하향 이탈 시" if sc > 0 else "상향 돌파 시") + " 추세 훼손으로 간주하고 즉시 포지션을 종료합니다.</small>", unsafe_allow_html=True)
-                        st.write("<small>4. <b>횡보/변동성:</b> EMA 수렴 구간은 휩쏘의 위험이 매우 높으므로 진입을 자제하고 방향성 확정 후 재진입합니다.</small>", unsafe_allow_html=True)
-                        st.write("<small>5. <b>익절 전략:</b> 직전 매물대에서 분할 익절하여 수익을 확정하고, 추세 강도가 약화되면 전량 청산합니다.</small>", unsafe_allow_html=True)
-
+                                if s['name'] == "EMA 200 추세":
+                    st.write(f"<small><b>현재 봇의 판단:</b> {status}</small>", unsafe_allow_html=True)
+                    st.write(f"<small>1. <b>추세 판단:</b> 현재 가격은 200 EMA {'상단' if '상승' in status else '하단'}에 위치하여 <b>{status}</b>입니다.</small>", unsafe_allow_html=True)
+                    st.write(f"<small>2. <b>진입 원칙:</b> {status} 방향에 맞춰 롱/숏 가점 및 감점을 실시간으로 적용합니다.</small>", unsafe_allow_html=True)
+                    st.write(f"<small>3. <b>손절 대응:</b> 200 EMA {'하향 이탈' if '상승' in status else '상향 돌파'} 시 추세 훼손으로 간주하고 포지션을 즉시 정리합니다.</small>", unsafe_allow_html=True)
+                    st.write("<small>4. <b>횡보/변동성:</b> EMA 근처 횡보 구간은 휩쏘 위험이 높으므로 방향성 확정 후 전략을 수행합니다.</small>", unsafe_allow_html=True)
+                    st.write("<small>5. <b>익절 전략:</b> 추세 가속 시 분할 익절하고, 가점 점수가 낮아지면 전량 청산하여 수익을 확보합니다.</small>", unsafe_allow_html=True)
+                
                 # 2. EMA 배열 상세 설명 (정배열/역배열/변곡점 구분)
                 elif s['name'] == "EMA 변곡점/정/역배열":
                     st.write("<small>1. <b>현재 배열 상태:</b> 현재 EMA는 " + ("<b>정배열(상승장)</b> 상태입니다." if ema_total_score > 0 else "<b>역배열(하락장)</b> 상태입니다.") + "</small>", unsafe_allow_html=True)

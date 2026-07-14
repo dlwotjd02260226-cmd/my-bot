@@ -11,7 +11,9 @@ class BuyAndSellChecking:
             '4h': 2.0, 
             '1d': 4.0
         }
-        def get_live_price(self):
+
+        
+    def get_live_price(self):
             """라이브 시장가 파일에서 가격을 읽어오는 함수 추가"""
             with open("live_price.json", "r") as f:
                 data = json.load(f)

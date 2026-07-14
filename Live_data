@@ -2,22 +2,40 @@ import requests
 import json
 import time
 
-def save_data():
+#1시간4시간1일 500개 차트,실시간시장가 데이터추적
+
+# 설정
+TIMEFRAMES = ['1H', '4H', '1D']
+SYMBOL = "BTC-USDT"
+
+def fetch_and_save_data():
     while True:
-        # 1. OKX에서 1시간 봉 데이터 가져오기
-        url = "https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar=1h&limit=500"
-        try:
-            r = requests.get(url, timeout=2)
-            data = r.json().get('data', [])
-            if data:
-                # 2. 데이터를 data.json 파일에 저장
-                with open("data.json", "w") as f:
-                    json.dump(data, f)
-                print("데이터 업데이트 완료")
-        except:
-            print("데이터 업데이트 실패")
-        time.sleep(60) # 1분마다 반복
+        # 1. 차트 데이터 갱신 (1분마다 혹은 필요시)
+        for tf in TIMEFRAMES:
+            url = f"https://www.okx.com/api/v5/market/candles?instId={SYMBOL}&bar={tf}&limit=500"
+            try:
+                r = requests.get(url, timeout=2)
+                data = r.json().get('data', [])
+                if data:
+                    with open(f"{tf.lower()}.json", "w") as f:
+                        json.dump(data, f)
+            except:
+                print(f"{tf} 데이터 갱신 실패")
+
+        # 2. 실시간 시장가 0.1초마다 긁어오기 (별도 파일 혹은 변수 관리)
+        for _ in range(600): # 1분 동안 0.1초씩 600번 반복
+            try:
+                ticker_url = f"https://www.okx.com/api/v5/market/ticker?instId={SYMBOL}"
+                r = requests.get(ticker_url, timeout=0.1)
+                last_price = r.json().get('data', [{}])[0].get('last')
+                
+                # 시장가는 별도의 파일에 저장하여 Total_Score가 바로 읽게 함
+                with open("live_price.json", "w") as f:
+                    json.dump({"price": last_price}, f)
+                    
+            except:
+                pass
+            time.sleep(0.1) # 0.1초 대기
 
 if __name__ == "__main__":
-    save_data()
-
+    fetch_and_save_data()

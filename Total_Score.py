@@ -12,6 +12,16 @@ class BuyAndSellChecking:
             '1d': 4.0
         }
 
+    def get_live_price(self):
+    """라이브 시장가 파일에서 가격을 읽어오는 함수 추가"""
+    with open("live_price.json", "r") as f:
+        data = json.load(f)
+        return float(data['price'])
+
+# 사용 시:
+# price = self.get_live_price()
+# score, summary, status = self.perform_all_calculations(price)
+
     def get_data(self, tf):
         """[규격 적용] 타임프레임별 500봉 데이터 공급"""
         try:

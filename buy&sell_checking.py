@@ -25,20 +25,31 @@ class BuyAndSellChecking:
         except Exception:
             return None
 
-    def check_all_weighted(self, price):
-        """가중치가 적용된 자동 점수 산출 로직"""
-        total_weighted_score = 0
-        analysis_details = []
+    def perform_all_calculations(self, price):
+        # 1. 설정 및 초기화
+        total_score = 0
+        analysis_summary = []
+        strategy_tier = 1.5 
         
-        for tf, weight in self.weights.items():
+        # 2. 타임프레임별 가중치 자동 계산 루프
+        for tf, t_weight in self.time_weights.items():
             df = self.get_data(tf)
             if df is not None and not df.empty:
-                # strategy.py 모듈의 기존 함수 호출
-                long_score, short_score, status = strategy.get_dynamic_ema200_score(price, df)
+                score_sr, supports, resistances, log_msg_sr = strategy.calculate_sr_score(price, df)
+                score_vol, log_msg_vol = strategy.calculate_volume_score(df)
                 
-                # 가중치 적용 점수 산출
-                weighted_score = (long_score - short_score) * weight
-                total_weighted_score += weighted_score
-                analysis_details.append(f"{tf}: {status}({weighted_score:.1f})")
+                final_score = (score_sr + score_vol) * strategy_tier * t_weight
+                total_score += final_score
+                log_msg = f"{log_msg_sr} | {log_msg_vol}"
+                analysis_summary.append((tf, final_score, supports, resistances, log_msg))
+
+        # 3. EMA 분석
+        ema_engine = strategy.EMASignalEngine()
+        ema_total_score, ema_results = ema_engine.get_ema_analysis(self.get_data)
         
-        return total_weighted_score, analysis_details
+        # 4. 1h 기준 EMA 200 추세 로직
+        df_1h = self.get_data('1h')
+        long_score, short_score, status = strategy.get_dynamic_ema200_score(price, df_1h)
+        total_score += (long_score + short_score)
+
+        return total_score, analysis_summary, status

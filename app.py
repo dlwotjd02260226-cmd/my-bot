@@ -1,19 +1,25 @@
 import streamlit as st
-import requests
+import json
 import time
 from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
-import json
 import strategy
 
-# [데이터 파일에서 읽기: get_klines 대신 사용]
+# [데이터 파일에서 읽기: 튜닝 완료]
+# 이제 data.json 고정이 아니라, 웹소켓이 실시간으로 갱신하는 1h.json, 4h.json, 1d.json을 동적으로 읽어옵니다.
 def get_data_from_file(tf='1h', limit=500):
     try:
-        with open("data.json", "r") as f:
+        filename = f"{tf.lower()}.json"
+        with open(filename, "r") as f:
             data = json.load(f)
-            df = pd.DataFrame(data, columns=['ts', 'o', 'h', 'l', 'close', 'vol', 'confirm'])
+            # OKX 웹소켓/API가 주는 9개 로우 데이터 구조를 데이터프레임으로 변환
+            df = pd.DataFrame(data)
+            # 매매기법(strategy) 파일이 정상적으로 읽을 수 있도록 컬럼명을 정확히 매칭합니다.
+            df.columns = ['ts', 'o', 'high', 'low', 'close', 'vol', 'volCcy', 'volCcyQuote', 'confirm']
             df[['close', 'high', 'low', 'vol']] = df[['close', 'high', 'low', 'vol']].astype(float)
+            
+            # 최신 데이터가 위로 가도록 뒤집어서 인덱스를 초기화합니다.
             return df.iloc[::-1].reset_index(drop=True)
     except:
         return None
@@ -63,12 +69,15 @@ def set_msg(txt):
     elif "부족" in txt or "종료" in txt: st.session_state.msg_color = "#dc3545"
     else: st.session_state.msg_color = "#333"
 
-# 시세 가져오기 함수
+# [시세 가져오기 함수: 튜닝 완료]
+# 0.1초마다 인터넷 요청을 보내던 requests 기법을 제거하고, 웹소켓이 실시간으로 구워내는 live_price.json 메모리 파일을 읽습니다. (IP 차단 위험 제로)
 def get_price():
     try:
-        r = requests.get("https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT", timeout=2)
-        return float(r.json()['data'][0]['last'])
-    except: return 0.0
+        with open("live_price.json", "r") as f:
+            price_data = json.load(f)
+            return float(price_data.get("price", 0.0))
+    except: 
+        return 0.0
 
 price = get_price()
 
@@ -128,14 +137,11 @@ ema_total_score, ema_results = ema_engine.get_ema_analysis(get_data_from_file) #
 
 
 # --- [EMA 200 추세 기법 추가] ---
-# 봇이 스스로 EMA 200을 감지하여 롱/숏 점수를 계산합니다.
 df_1h = get_data_from_file('1h') 
 long_score, short_score, status = strategy.get_dynamic_ema200_score(price, df_1h)
 
-# 봇이 판단한 가감점을 total_score에 반영
 total_score += (long_score + short_score)
 
-# 화면(사이드바)에 봇의 현재 감지 상태 표시
 st.sidebar.write(f"**EMA 200 감지:** {status}")
 st.sidebar.write(f"적용 점수(롱/숏): {long_score}/{short_score}")
 # ------------------------------
@@ -252,7 +258,6 @@ with st.container(border=True):
 # [섹션 분리: 매매 분석 엔진 및 상세 보기]
 st.subheader("매매 분석 엔진")
 with st.container(border=True):
-    # 감지 로직
     strategies = [
         {"name": "지지 저항 분석", "detected": (len(analysis_summary) > 0)},
         {"name": "거래량 분석", "detected": (len(analysis_summary) > 0)},
@@ -273,7 +278,6 @@ with st.container(border=True):
                 st.markdown(f"---")
                 st.markdown(f"###### 🚩 기법: {s['name']}")
                 
-                # 1. EMA 200 추세 상세 설명
                 if s['name'] == "EMA 200 추세":
                     st.write(f"<small><b>현재 봇의 판단:</b> {status}</small>", unsafe_allow_html=True)
                     st.write(f"<small>1. <b>추세 판단:</b> 현재 가격은 200 EMA {'상단' if '상승' in status else '하단'}에 위치하여 <b>{status}</b>입니다.</small>", unsafe_allow_html=True)
@@ -282,14 +286,12 @@ with st.container(border=True):
                     st.write("<small>4. <b>횡보/변동성:</b> EMA 근처 횡보 구간은 휩쏘 위험이 높으므로 방향성 확정 후 전략을 수행합니다.</small>", unsafe_allow_html=True)
                     st.write("<small>5. <b>익절 전략:</b> 추세 가속 시 분할 익절하고, 가점 점수가 낮아지면 전량 청산하여 수익을 확보합니다.</small>", unsafe_allow_html=True)
                 
-                # 2. EMA 배열 상세 설명 (정배열/역배열/변곡점 구분)
                 elif s['name'] == "EMA 변곡점/정/역배열":
                     st.write("<small>1. <b>현재 배열 상태:</b> 현재 EMA는 " + ("<b>정배열(상승장)</b> 상태입니다." if ema_total_score > 0 else "<b>역배열(하락장)</b> 상태입니다.") + "</small>", unsafe_allow_html=True)
                     st.write("<small>2. <b>진입 및 대응:</b> " + ("정배열 시 가격이 EMA 지지를 받는 눌림목 구간에서 롱 진입을 노립니다." if ema_total_score > 0 else "역배열 시 가격이 EMA 저항을 받는 반등 구간에서 숏 진입을 노립니다.") + "</small>", unsafe_allow_html=True)
                     st.write("<small>3. <b>변곡점(EMA 수렴):</b> EMA 이평선들이 한 점으로 모이는 구간은 에너지가 응축되는 <b>변곡점</b>입니다. 이 구간에서 급격한 방향 전환이 발생하므로 추격 매수를 자제합니다.</small>", unsafe_allow_html=True)
                     st.write("<small>4. <b>리스크 관리:</b> 이평선 간격이 과도하게 벌어지면 기술적 반등(평균 회귀)이 일어날 수 있으니 익절을 우선시합니다.</small>", unsafe_allow_html=True)
 
-                # 3. 지지 저항 분석 상세 설명
                 elif s['name'] == "지지 저항 분석":
                     for tf, f_score, sup, res, log_msg in analysis_summary:
                         st.session_state.total_score += f_score
@@ -300,7 +302,6 @@ with st.container(border=True):
                         st.write("<small>4. <b>거래량 검증:</b> 거래량이 뒷받침되지 않은 돌파는 신뢰도가 낮으므로 진입 규모를 50% 이하로 낮추어 리스크를 관리합니다.</small>", unsafe_allow_html=True)
                         st.write(f"<small>5. <b>로그 분석:</b> {log_msg}</small>", unsafe_allow_html=True)
 
-    # ⚙️ 전체 기법 리스트 (펼치기 모드 적용 + 녹색불 왼쪽 배치)
     with st.expander("⚙️ 전체 기법 리스트"):
         for strat in strategies:
             col1, col2 = st.columns([0.15, 0.85])
@@ -353,3 +354,4 @@ if st.button("🔄 가상머니 초기화", use_container_width=True):
 st.subheader("거래 로그")
 for log in reversed(st.session_state.logs[-15:]): st.text(log)
 time.sleep(0.3)
+

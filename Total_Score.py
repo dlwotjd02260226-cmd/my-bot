@@ -1,6 +1,7 @@
 import pandas as pd
 import json
 import skill
+import time
 
 class BuyAndSellChecking:
     def __init__(self):
@@ -12,27 +13,50 @@ class BuyAndSellChecking:
             '1d': 4.0
         }
 
-        
     def get_live_price(self):
-            """라이브 시장가 파일에서 가격을 읽어오는 함수 추가"""
-            with open("live_price.json", "r") as f:
-                data = json.load(f)
-                return float(data['price'])
-
-# 사용 시:
-# price = self.get_live_price()
-# score, summary, status = self.perform_all_calculations(price)
+        """라이브 시장가 파일에서 가격을 안전하게 읽어오는 함수"""
+        # [보완] 웹소켓 수집기가 파일에 쓰고 있는 찰나의 순간에 읽어서 발생하는 충돌(에러)을 방지합니다.
+        for _ in range(3):
+            try:
+                with open("live_price.json", "r") as f:
+                    data = json.load(f)
+                    return float(data['price'])
+            except (Exception, json.JSONDecodeError):
+                time.sleep(0.02) # 충돌 시 0.02초 후 재시도
+        return 0.0
 
     def get_data(self, tf):
         """[규격 적용] 타임프레임별 500봉 데이터 공급"""
         try:
-            # 1h.json, 4h.json, 1d.json 파일로부터 데이터를 읽어옴
-            with open(f"{tf}.json", "r") as f:
-                data = json.load(f)
-                df = pd.DataFrame(data, columns=['ts', 'o', 'h', 'l', 'close', 'vol', 'confirm'])
-                # 항상 최신 500봉 유지
-                df = df.iloc[::-1].head(self.candle_limit).reset_index(drop=True)
-                return df
+            # 파일 읽기 동시성 충돌 방지 안전장치
+            data = None
+            for _ in range(3):
+                try:
+                    with open(f"{tf}.json", "r") as f:
+                        data = json.load(f)
+                        break
+                except (Exception, json.JSONDecodeError):
+                    time.sleep(0.02)
+            
+            if data is None:
+                return None
+
+            # 💡 [코드 변경 1] 컬럼 개수 불일치 해결
+            # 웹소켓이 저장하는 데이터는 9개인데, 기존 형식은 7개 컬럼('ts' ~ 'confirm')을 원합니다.
+            # 데이터프레임을 만들기 전에 원하는 7개 데이터만 쏙 골라내어 ValueError를 차단합니다.
+            filtered_data = [
+                [row[0], row[1], row[2], row[3], row[4], row[5], row[8]]
+                for row in data
+            ]
+            
+            df = pd.DataFrame(filtered_data, columns=['ts', 'o', 'h', 'l', 'close', 'vol', 'confirm'])
+            
+            # 💡 [코드 변경 2] 정렬 방식 개편
+            # 새 웹소켓 수집기는 데이터를 이미 [과거 -> 최신] 순으로 정렬해서 저장합니다.
+            # 따라서 기존의 역정렬(iloc[::-1])을 실행하면 오히려 데이터가 거꾸로 뒤집힙니다.
+            # 뒤집기 없이 맨 뒤의 최신 500봉(.tail)을 정방향 그대로 가져오도록 알맹이만 수정했습니다.
+            df = df.tail(self.candle_limit).reset_index(drop=True)
+            return df
         except Exception:
             return None
 

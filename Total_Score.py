@@ -1,7 +1,7 @@
 import json
 import time
 import pandas as pd
-import skill  # skill.py에서는 순수 매매 기법만 불러옴
+import skill  # skill.py의 순수 기법 불러오기
 
 
 # 🛡️ [total_score 전용] EMA 120 추세 검문소 클래스
@@ -45,9 +45,9 @@ class EMAGatekeeper:
 class TotalScoreEngine:
     def __init__(self):
         self.candle_limit = 500
-        self.weights = {'1h': 1.0, '4h': 2.0, '1d': 4.0}
+        self.timeframes = ['1h', '4h', '1d']
         
-        # 🎯 EMA 120 검문소를 total_score 내부에서 직접 생성
+        # 🎯 EMA 120 검문소를 total_score 내부에서 직접 관리
         self.ema_gatekeeper = EMAGatekeeper(period=120, bonus_score=15, penalty_ratio=0.2)
 
     def get_live_price(self):
@@ -62,7 +62,7 @@ class TotalScoreEngine:
         return 0.0
 
     def get_data(self, tf):
-        """타임프레임별 데이터 공급 (데이터 타입 안전 변환 적용)"""
+        """타임프레임별 데이터 공급 (skill.py 컬럼명 호환 및 타입 변환 적용)"""
         try:
             data = None
             for _ in range(3):
@@ -80,11 +80,12 @@ class TotalScoreEngine:
                 [row[0], row[1], row[2], row[3], row[4], row[5], row[8]]
                 for row in data
             ]
-            df = pd.DataFrame(filtered_data, columns=['ts', 'o', 'h', 'l', 'close', 'vol', 'confirm'])
+            
+            # 💡 [충돌 해결] skill.py가 사용하는 high, low 컬럼명을 명확히 맞춤
+            df = pd.DataFrame(filtered_data, columns=['ts', 'open', 'high', 'low', 'close', 'vol', 'confirm'])
             
             # 💡 [안전장치] 수치형 컬럼들의 데이터 타입을 float로 강제 변환
-            # JSON 읽기 시 문자열로 들어오는 현상 및 연산 에러를 100% 방지합니다.
-            numeric_cols = ['o', 'h', 'l', 'close', 'vol']
+            numeric_cols = ['open', 'high', 'low', 'close', 'vol']
             for col in numeric_cols:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
@@ -93,28 +94,26 @@ class TotalScoreEngine:
             return None
 
     def calculate_total_score(self, price):
-        """1. skill.py에서 날것의 점수 수집 -> 2. EMA 120 검문소 통과 및 최종 산출"""
+        """1. skill.py에서 롱/숏 순수 점수 수집 -> 2. EMA 120 검문소 통과 및 최종 산출"""
         raw_long_total = 0.0
         raw_short_total = 0.0
         analysis_summary = []
-        strategy_tier = 1.5
 
         # 1. skill.py의 순수 기법들로부터 점수 수집
-        for tf, t_weight in self.weights.items():
+        for tf in self.timeframes:
             df = self.get_data(tf)
             if df is not None and not df.empty:
-                # skill.py 내부 기법 호출
-                score_sr_l, score_sr_s, supps, resis, log_sr = skill.calculate_sr_score(price, df)
-                score_vol_l, score_vol_s, log_vol = skill.calculate_volume_score(df)
+                # skill.py 내부의 정확한 함수 호출 (롱점수, 숏점수를 각각 분리 수집)
+                sup_score, res_score, supps, resis, log_msg = skill.calculate_sr_score_by_touch(
+                    price=price, 
+                    df=df, 
+                    tf=tf
+                )
 
-                # 가중치 계산
-                tf_long = (score_sr_l + score_vol_l) * strategy_tier * t_weight
-                tf_short = (score_sr_s + score_vol_s) * strategy_tier * t_weight
+                raw_long_total += sup_score
+                raw_short_total += res_score
 
-                raw_long_total += tf_long
-                raw_short_total += tf_short
-
-                analysis_summary.append((tf, tf_long - tf_short, supps, resis, f"{log_sr} | {log_vol}"))
+                analysis_summary.append((tf, sup_score - res_score, supps, resis, log_msg))
 
         # 2. 🛡️ total_score 내부에 위치한 EMA 120 검문소 통과!
         df_1h = self.get_data('1h')
@@ -128,3 +127,4 @@ class TotalScoreEngine:
         final_score = final_long - final_short
 
         return final_score, analysis_summary, ema_info
+

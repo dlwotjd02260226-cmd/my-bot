@@ -145,3 +145,48 @@ if __name__ == "__main__":
         asyncio.run(watch_live_market())
     except KeyboardInterrupt:
         print("\n👋 수집기가 사용자에 의해 안전하게 종료되었습니다.")
+
+
+# live_data.py 맨 아래에 추가할 코드
+
+import os
+import json
+import pandas as pd
+
+def get_live_candles_with_volume(tf='1h'):
+    """
+    skill.py의 요청을 받아서 
+    1) 현재가 파일과 
+    2) 해당 타임프레임(1h, 4h, 1d)의 캔들(거래량 포함) 데이터를 긁어와서 
+    skill.py에 던져주는 함수입니다.
+    """
+    
+    # 1. 실시간 현재가 파일 읽기
+    if not os.path.exists("live_price.json"):
+        print("⚠️ 실시간 현재가 파일(live_price.json)을 찾을 수 없습니다.")
+        return None, 0.0
+        
+    with open("live_price.json", "r") as f:
+        price_data = json.load(f)
+        current_price = float(price_data["price"])
+
+    # 2. 요청받은 타임프레임(tf)에 맞는 캔들 파일 읽기 (예: 1h.json, 4h.json, 1d.json)
+    candle_file = f"{tf.lower()}.json"
+    if not os.path.exists(candle_file):
+        print(f"⚠️ 실시간 캔들 파일({candle_file})을 찾을 수 없습니다.")
+        return None, 0.0
+        
+    with open(candle_file, "r") as f:
+        raw_candles = json.load(f)
+        
+    # 3. 리스트 데이터를 판다스 DataFrame으로 변환 (거래량 포함)
+    cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'volCcy', 'volCcyQuote', 'confirm']
+    df = pd.DataFrame(raw_candles, columns=cols)
+    
+    # 데이터 타입을 숫자로 안전하게 변환
+    for col in ['open', 'high', 'low', 'close', 'volume']:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # 4. skill.py로 데이터(df)와 현재가(current_price)를 밖으로 던져줌 (Return)
+    return df, current_price
+

@@ -6,10 +6,21 @@ class BuyAndSellEngine:
     def __init__(self):
         # Total_Score.py 파일 안의 계산기 클래스를 불러와 장착합니다.
         self.calculator = TotalScoreCalculator()
-    
+        
+        # ⚙️ [진입 기준 점수 설정판] - 필요시 수치만 수정 가능
+        self.long_threshold = 25    # +25점 이상이면 롱 진입
+        self.short_threshold = -25  # -25점 이하이면 숏 진입
+
     def get_decision(self, price):
-        # 1. 메모리 장부와 연동된 계산기를 통해 현재가의 최종 점수를 뽑아냅니다.
+        # 1. 지지/저항 점수가 상쇄 적용된 최종 총점을 불러옵니다.
         score = self.calculator.get_total_score(price)
         
-        # 2. [형식 유지] 점수 기준에 따른 최종 롱/숏/대기 텍스트 판정을 리턴합니다.
-        return score, ("롱 진입" if score >= 25 else "숏 진입" if score <= -25 else "대기")
+        # 2. [기존 리턴 구조 유지] 상쇄된 총점에 따른 최종 롱/숏/대기 판정
+        if score >= self.long_threshold:
+            decision = "롱 진입"
+        elif score <= self.short_threshold:
+            decision = "숏 진입"
+        else:
+            decision = "대기"
+            
+        return score, decision

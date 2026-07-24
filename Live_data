@@ -3,6 +3,7 @@ import websockets
 import json
 import os
 import requests
+from shared_hub import hub   # 🆕 추가: DataHub 연동
 
 # 설정
 TIMEFRAMES = ['1H', '4H', '1D']
@@ -71,6 +72,7 @@ async def watch_live_market():
         candle_buffers[tf] = fetch_initial_history(tf)
         if candle_buffers[tf]:
             atomic_save_json(f"{tf.lower()}.json", candle_buffers[tf])
+            hub.update(tf.lower(), candle_buffers[tf])  # 🆕 추가: 초기 500개 hub에 반영
     
     uri = "wss://ws.okx.com:443/ws/v5/public"
     
@@ -109,6 +111,7 @@ async def watch_live_market():
                         
                         # 파일 충돌 없이 안전하게 저장 (해결 3)
                         atomic_save_json("live_price.json", {"price": last_price})
+                        hub.update("live_price", last_price)  # 🆕 추가: 실시간가 hub에 반영
                     
                     # 2. 실시간 캔들 업데이트 처리 (1h.json, 4h.json, 1d.json)
                     elif "candle" in channel:
@@ -130,6 +133,7 @@ async def watch_live_market():
                             
                             # 파일 덮어쓰기 충돌 차단 (해결 3)
                             atomic_save_json(f"{tf_key.lower()}.json", buffer)
+                            hub.update(tf_key.lower(), buffer)  # 🆕 추가: hub에도 동일하게 반영
                             
         except (websockets.exceptions.ConnectionClosed, Exception) as e:
             print(f"⚠️ 연결이 끊겼거나 에러가 발생했습니다: {e}")

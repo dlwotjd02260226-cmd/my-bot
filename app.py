@@ -4,7 +4,10 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 import pandas as pd
-import strategy
+import skill
+
+# [엔진 연결용 추가]
+import buy_sell_engine
 
 # [데이터 파일에서 읽기: 튜닝 완료]
 # 이제 data.json 고정이 아니라, 웹소켓이 실시간으로 갱신하는 1h.json, 4h.json, 1d.json을 동적으로 읽어옵니다.
@@ -15,7 +18,7 @@ def get_data_from_file(tf='1h', limit=500):
             data = json.load(f)
             # OKX 웹소켓/API가 주는 9개 로우 데이터 구조를 데이터프레임으로 변환
             df = pd.DataFrame(data)
-            # 매매기법(strategy) 파일이 정상적으로 읽을 수 있도록 컬럼명을 정확히 매칭합니다.
+            # 매매기법(skill) 파일이 정상적으로 읽을 수 있도록 컬럼명을 정확히 매칭합니다.
             df.columns = ['ts', 'o', 'high', 'low', 'close', 'vol', 'volCcy', 'volCcyQuote', 'confirm']
             df[['close', 'high', 'low', 'vol']] = df[['close', 'high', 'low', 'vol']].astype(float)
             
@@ -60,6 +63,8 @@ if 'balance' not in st.session_state:
     st.session_state.mode = "수동"
     st.session_state.wins_total = 0.0
     st.session_state.losses_total = 0.0
+    # [엔진 연결용 추가]
+    st.session_state.engine = buy_sell_engine.BuySellEngine()
 
 # 메시지 알림 함수
 def set_msg(txt):
@@ -124,27 +129,60 @@ strategy_tier = 1.5
 for tf, t_weight in time_weights.items():
     df = get_data_from_file(tf) # 수정됨
     if df is not None and not df.empty:
-        score_sr, supports, resistances, log_msg_sr = strategy.calculate_sr_score(price, df) # 수정됨
-        score_vol, log_msg_vol = strategy.calculate_volume_score(df) # 수정됨
+        score_sr, supports, resistances, log_msg_sr = skill.calculate_sr_score(price, df) # 수정됨
+        score_vol, log_msg_vol = skill.calculate_volume_score(df) # 수정됨
         
         final_score = (score_sr + score_vol) * strategy_tier * t_weight
         total_score += final_score
         log_msg = f"{log_msg_sr} | {log_msg_vol}"
         analysis_summary.append((tf, final_score, supports, resistances, log_msg))
 
-ema_engine = strategy.EMASignalEngine() # 수정됨
+ema_engine = skill.EMASignalEngine() # 수정됨
 ema_total_score, ema_results = ema_engine.get_ema_analysis(get_data_from_file) # 수정됨
 
 
 # --- [EMA 200 추세 기법 추가] ---
 df_1h = get_data_from_file('1h') 
-long_score, short_score, status = strategy.get_dynamic_ema200_score(price, df_1h)
+long_score, short_score, status = skill.get_dynamic_ema200_score(price, df_1h)
 
 total_score += (long_score + short_score)
 
 st.sidebar.write(f"**EMA 200 감지:** {status}")
 st.sidebar.write(f"적용 점수(롱/숏): {long_score}/{short_score}")
 # ------------------------------
+
+
+# [엔진 연결용 추가: 계산된 점수를 엔진에 전달하여 판단 받기]
+atr_val = 0.0
+if df_1h is not None and not df_1h.empty:
+    high_low = df_1h['high'] - df_1h['low']
+    atr_val = high_low.rolling(14).mean().iloc[-1]
+    if pd.isna(atr_val): atr_val = price * 0.01
+
+market_data = {'atr': atr_val}
+ui_settings = {
+    'auto_mode': is_auto,
+    'risk_pct': 0.02,
+    'sl_multiplier': 1.5,
+    'rr_ratio': st.session_state.tp_input / st.session_state.sl_input if st.session_state.sl_input > 0 else 2.0
+}
+decision = st.session_state.engine.get_decision(price, total_score, market_data, ui_settings)
+
+
+# [엔진 연결용 추가: 오토 모드일 때 자동 진입 수행]
+if st.session_state.auto_trading and not st.session_state.positions:
+    if decision['action'] == 'LONG' and amt <= st.session_state.balance:
+        st.session_state.positions.append({'type': '롱', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
+        st.session_state.balance -= amt
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 오토매매 | 롱 진입 | 진입가: {price:.2f}")
+        set_msg("오토 롱 진입 완료")
+        st.rerun()
+    elif decision['action'] == 'SHORT' and amt <= st.session_state.balance:
+        st.session_state.positions.append({'type': '숏', 'entry': price, 'margin': amt, 'lev': lev, 'time': datetime.now().strftime('%H:%M:%S')})
+        st.session_state.balance -= amt
+        st.session_state.logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] 오토매매 | 숏 진입 | 진입가: {price:.2f}")
+        set_msg("오토 숏 진입 완료")
+        st.rerun()
 
 
 # 자동 청산 로직

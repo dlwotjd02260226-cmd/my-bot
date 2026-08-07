@@ -2,175 +2,246 @@ import asyncio
 import websockets
 import json
 import os
+import logging
 import requests
-from shared_hub import hub   # 🆕 추가: DataHub 연동
+from shared_hub import hub
 
+logger = logging.getLogger(__name__)
+
+# ----------------------------------------------------
 # 설정
+# ----------------------------------------------------
 TIMEFRAMES = ['1H', '4H', '1D']
-SYMBOL = "BTC-USDT"
+SYMBOLS = ["BTC-USDT", "ETH-USDT", "XRP-USDT"]  # 코인 추가/삭제는 이 리스트만 건드리면 됨
+LONG_SHORT_POLL_SECONDS = 60  # 롱숏비율은 웹소켓이 없어서 이 주기로 REST 폴링
+ACTIVE_SYMBOL_FILE = "active_symbol.json"
+
 
 # ----------------------------------------------------
-# [해결 3] 파일 읽기/쓰기 충돌(Race Condition) 방지 함수
+# 이름 생성 함수 - 코인/타임프레임/항목 이름을 손으로 안 치고 통일해서 생성
 # ----------------------------------------------------
+def make_key(symbol, timeframe, field):
+    parts = [symbol.lower()]
+    if timeframe:
+        parts.append(timeframe.lower())
+    parts.append(field)
+    return "_".join(parts)
+
+
+def swap_inst_id(symbol):
+    """미체결약정/펀딩비율은 무기한 스왑(선물) 전용이라 현물 심볼을 스왑 심볼로 변환.
+    예: BTC-USDT -> BTC-USDT-SWAP
+    실제로 스왑 거래를 안 한다면 이 두 지표는 값이 안 들어올 수 있음."""
+    return f"{symbol}-SWAP"
+
+
+# ----------------------------------------------------
+# [활성 코인] 지금 실제로 매매 중인 코인 하나를 관리
+# 포지션 청산 후 코인을 바꿀 때 set_active_symbol()을 호출하면 됨.
+# 데이터 수집(SYMBOLS 전체)과는 별개 - 데이터는 항상 다 받고 있고, 이건 그중 "지금 매매 대상"만 표시.
+# ----------------------------------------------------
+def get_active_symbol():
+    if os.path.exists(ACTIVE_SYMBOL_FILE):
+        try:
+            with open(ACTIVE_SYMBOL_FILE) as f:
+                return json.load(f)["symbol"]
+        except Exception:
+            pass
+    return SYMBOLS[0]
+
+
+def set_active_symbol(symbol):
+    if symbol not in SYMBOLS:
+        raise ValueError(f"{symbol}은 SYMBOLS 목록에 없음 - 먼저 SYMBOLS에 추가해야 함")
+    atomic_save_json(ACTIVE_SYMBOL_FILE, {"symbol": symbol})
+    hub.update("active_symbol", symbol)  # shared_hub.py에 읽는 방법이 따로 있다면 그쪽으로 바꿔도 됨
+
+
 def atomic_save_json(filename, data):
     tmp_filename = f"{filename}.tmp"
     with open(tmp_filename, "w") as f:
         json.dump(data, f, indent=2)
     os.replace(tmp_filename, filename)
 
-# ----------------------------------------------------
-# [해결 2] 문자열 -> 숫자(float) 형변환 함수
-# ----------------------------------------------------
+
 def format_candle_data(raw_candle):
     return [
-        raw_candle[0],          # ts (타임스탬프)
-        float(raw_candle[1]),   # open (시가)
-        float(raw_candle[2]),   # high (고가)
-        float(raw_candle[3]),   # low (저가)
-        float(raw_candle[4]),   # close (종가)
-        float(raw_candle[5]),   # vol (거래량)
-        raw_candle[6],          # volCcy
-        raw_candle[7],          # volCcyQuote
-        raw_candle[8]           # confirm (봉 마감 여부: '0' 또는 '1')
+        raw_candle[0],           # ts
+        float(raw_candle[1]),    # open
+        float(raw_candle[2]),    # high
+        float(raw_candle[3]),    # low
+        float(raw_candle[4]),    # close
+        float(raw_candle[5]),    # vol
+        float(raw_candle[6]),    # volCcy - 숫자로 변환됨
+        float(raw_candle[7]),    # volCcyQuote - 숫자로 변환됨
+        raw_candle[8] == '1',    # confirm - 진짜 True/False
     ]
 
-# ----------------------------------------------------
-# [해결 4] 초기 500개 데이터 확보 및 과거 순 정렬 (Bootstrapping)
-# ----------------------------------------------------
-def fetch_initial_history(tf):
-    """웹소켓 시작 전, 과거 캔들 500개를 REST API로 1회 먼저 가져와 정렬하는 함수"""
-    url = f"https://www.okx.com/api/v5/market/candles?instId={SYMBOL}&bar={tf}&limit=500"
+
+def fetch_initial_history(symbol, tf):
+    url = f"https://www.okx.com/api/v5/market/candles?instId={symbol}&bar={tf}&limit=500"
     try:
         r = requests.get(url, timeout=5)
         raw_data = r.json().get('data', [])
         if not raw_data:
             return []
-        
-        # 1. 수집과 동시에 숫자형으로 변환 (해결 2)
         formatted_data = [format_candle_data(c) for c in raw_data]
-        
-        # 2. OKX의 [최신->과거] 순서를 매물대 로직이 원하는 [과거->최신] 순서로 뒤집기 (해결 4)
         formatted_data.reverse()
         return formatted_data
     except Exception as e:
-        print(f"⚠️ {tf} 초기 히스토리 로드 실패: {e}")
+        logger.warning(f"{symbol} {tf} 초기 히스토리 로드 실패: {e}")
         return []
 
-# ----------------------------------------------------
-# [추가] skill.py의 요청을 받아 데이터를 전달해 주는 배달부 함수
-# ----------------------------------------------------
-def get_live_candles_with_volume(tf='1h'):
-    """
-    skill.py의 요청을 받아서 
-    1) 현재가 파일과 
-    2) 해당 타임프레임(1h, 4h, 1d)의 캔들(거래량 포함) 데이터를 읽어와서 반환합니다.
-    """
-    if not os.path.exists("live_price.json"):
-        print("⚠️ 실시간 현재가 파일(live_price.json)을 찾을 수 없습니다.")
-        return None, 0.0
-        
-    with open("live_price.json", "r") as f:
-        price_data = json.load(f)
-        current_price = float(price_data["price"])
 
-    candle_file = f"{tf.lower()}.json"
-    if not os.path.exists(candle_file):
-        print(f"⚠️ 실시간 캔들 파일({candle_file})을 찾을 수 없습니다.")
+def fetch_long_short_ratio(symbol):
+    """OKX는 롱숏비율을 웹소켓으로 push 안 함 (REST 전용). 주기적으로 직접 요청.
+    아래 엔드포인트는 OKX v5 REST 관례를 따른 것 - 실제 사용 전 공식 문서로 한 번 더
+    확인 권장 (검색으로 채널 존재는 확인했지만 정확한 경로까지는 재확인 필요)."""
+    url = "https://www.okx.com/api/v5/rubik/stat/contracts/long-short-account-ratio-contract"
+    try:
+        r = requests.get(url, params={"instId": swap_inst_id(symbol), "period": "5m"}, timeout=5)
+        data = r.json().get("data", [])
+        if data:
+            return float(data[0][1])
+    except Exception as e:
+        logger.warning(f"{symbol} 롱숏비율 조회 실패: {e}")
+    return None
+
+
+def get_live_candles_with_volume(symbol=None, tf='1h'):
+    """저장된 현재가 + 캔들(거래량 포함) 데이터를 읽어서 반환. symbol 생략 시 활성 코인 사용."""
+    import pandas as pd
+    if symbol is None:
+        symbol = get_active_symbol()
+
+    price_file = f"{make_key(symbol, None, 'live_price')}.json"
+    if not os.path.exists(price_file):
+        logger.warning(f"실시간 현재가 파일({price_file})을 찾을 수 없습니다.")
         return None, 0.0
-        
+    with open(price_file, "r") as f:
+        current_price = float(json.load(f)["price"])
+
+    candle_file = f"{make_key(symbol, tf, 'candles')}.json"
+    if not os.path.exists(candle_file):
+        logger.warning(f"실시간 캔들 파일({candle_file})을 찾을 수 없습니다.")
+        return None, 0.0
     with open(candle_file, "r") as f:
         raw_candles = json.load(f)
-        
-    cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'volCcy', 'volCcyQuote', 'confirm']
-    import pandas as pd
-    df = pd.DataFrame(raw_candles, columns=cols)
-    
-    for col in ['open', 'high', 'low', 'close', 'volume']:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
 
+    cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'volCcy', 'volCcyQuote', 'confirm']
+    df = pd.DataFrame(raw_candles, columns=cols)
+    for col in ['open', 'high', 'low', 'close', 'volume', 'volCcy', 'volCcyQuote']:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
     return df, current_price
 
-# ----------------------------------------------------
-# [해결 1] 0.1초 무한 호출을 막는 웹소켓 엔진
-# ----------------------------------------------------
+
+def _load_all_history(candle_buffers):
+    """모든 심볼×타임프레임의 과거 500개를 불러와 반영. 재연결마다 다시 호출해서
+    끊긴 구간의 빈 캔들을 메꾼다."""
+    for symbol in SYMBOLS:
+        for tf in TIMEFRAMES:
+            history = fetch_initial_history(symbol, tf)
+            if history:
+                candle_buffers[(symbol, tf)] = history
+                key = make_key(symbol, tf, "candles")
+                atomic_save_json(f"{key}.json", history)
+                hub.update(key, history)
+
+
+async def poll_long_short_ratio():
+    """롱숏비율은 웹소켓이 없어서 별도 루프로 주기적으로 갱신."""
+    while True:
+        for symbol in SYMBOLS:
+            ratio = fetch_long_short_ratio(symbol)
+            if ratio is not None:
+                hub.update(make_key(symbol, None, "long_short_ratio"), ratio)
+        await asyncio.sleep(LONG_SHORT_POLL_SECONDS)
+
+
 async def watch_live_market():
-    # 타임프레임별 500개 캔들 메모리 버퍼 초기화
     candle_buffers = {}
-    for tf in TIMEFRAMES:
-        print(f"📦 {tf} 초기 데이터 500개 다운로드 중...")
-        candle_buffers[tf] = fetch_initial_history(tf)
-        if candle_buffers[tf]:
-            atomic_save_json(f"{tf.lower()}.json", candle_buffers[tf])
-            hub.update(tf.lower(), candle_buffers[tf])  # 🆕 추가: 초기 500개 hub에 반영
-    
+    logger.info("초기 히스토리 로딩 중...")
+    _load_all_history(candle_buffers)
+
     uri = "wss://ws.okx.com:443/ws/v5/public"
-    
+
     while True:
         try:
-            print(f"\n📡 OKX 실시간 웹소켓 서버 연결 시도... ({SYMBOL})")
             async with websockets.connect(uri, ping_interval=20, ping_timeout=20) as websocket:
-                print("✅ OKX 웹소켓 연결 성공! 데이터 실시간 구독을 시작합니다.")
-                
-                # 구독 채널 세팅 (실시간 시장가 + 1H/4H/1D 캔들)
-                subscribe_msg = {
-                    "op": "subscribe",
-                    "args": [
-                        {"channel": "tickers", "instId": SYMBOL},
-                        {"channel": f"candle{TIMEFRAMES[0]}", "instId": SYMBOL},
-                        {"channel": f"candle{TIMEFRAMES[1]}", "instId": SYMBOL},
-                        {"channel": f"candle{TIMEFRAMES[2]}", "instId": SYMBOL}
-                    ]
-                }
-                await websocket.send(json.dumps(subscribe_msg))
-                
-                # OKX가 던져주는 데이터를 실시간으로 수신 (0.1초마다 requests 날릴 필요 없음)
+                logger.info("OKX 웹소켓 연결 성공")
+                _load_all_history(candle_buffers)  # 재연결마다 히스토리 재로딩
+
+                args = []
+                for s in SYMBOLS:
+                    args.append({"channel": "tickers", "instId": s})
+                    for tf in TIMEFRAMES:
+                        args.append({"channel": f"candle{tf}", "instId": s})
+                    swap_id = swap_inst_id(s)
+                    args.append({"channel": "open-interest", "instId": swap_id})
+                    args.append({"channel": "funding-rate", "instId": swap_id})
+                await websocket.send(json.dumps({"op": "subscribe", "args": args}))
+
                 async for message in websocket:
                     packet = json.loads(message)
-                    
+
+                    if packet.get("event") == "error":
+                        logger.error(f"OKX 웹소켓 에러 응답: {packet}")
+                        continue
                     if "data" not in packet:
                         continue
-                        
-                    channel = packet["arg"]["channel"]
+
+                    arg = packet["arg"]
+                    channel = arg["channel"]
+                    inst_id = arg.get("instId", SYMBOLS[0])
+                    symbol = inst_id.replace("-SWAP", "")  # 스왑 채널도 원래 심볼 이름으로 통일
                     raw_data = packet["data"][0]
-                    
-                    # 1. 실시간 시장가 틱 처리 (live_price.json)
+
                     if channel == "tickers":
-                        # 문자열 가격을 숫자로 즉시 캐스팅 (해결 2)
                         last_price = float(raw_data["last"])
-                        
-                        # 파일 충돌 없이 안전하게 저장 (해결 3)
-                        atomic_save_json("live_price.json", {"price": last_price})
-                        hub.update("live_price", last_price)  # 🆕 추가: 실시간가 hub에 반영
-                    
-                    # 2. 실시간 캔들 업데이트 처리 (1h.json, 4h.json, 1d.json)
+                        key = make_key(symbol, None, "live_price")
+                        atomic_save_json(f"{key}.json", {"price": last_price})
+                        hub.update(key, last_price)
+
+                    elif channel == "open-interest":
+                        key = make_key(symbol, None, "open_interest")
+                        hub.update(key, float(raw_data["oi"]))
+
+                    elif channel == "funding-rate":
+                        key = make_key(symbol, None, "funding_rate")
+                        hub.update(key, float(raw_data["fundingRate"]))
+
                     elif "candle" in channel:
-                        # 채널명에서 타임프레임 추출 (예: candle1H -> 1H)
                         tf_key = channel.replace("candle", "")
-                        
                         new_candle = format_candle_data(raw_data)
-                        buffer = candle_buffers.get(tf_key, [])
-                        
-                        if buffer:
-                            # 현재 수신한 실시간 캔들이 버퍼의 맨 마지막(최신) 캔들과 같은 시간대라면 -> 갱신
-                            if buffer[-1][0] == new_candle[0]:
-                                buffer[-1] = new_candle
-                            # 새로운 시간대의 캔들이 시작되었다면 -> 추가 후 500개 유지
-                            else:
-                                buffer.append(new_candle)
-                                if len(buffer) > 500:
-                                    buffer.pop(0) # 맨 앞(가장 과거) 캔들 제거
-                            
-                            # 파일 덮어쓰기 충돌 차단 (해결 3)
-                            atomic_save_json(f"{tf_key.lower()}.json", buffer)
-                            hub.update(tf_key.lower(), buffer)  # 🆕 추가: hub에도 동일하게 반영
-                            
-        except (websockets.exceptions.ConnectionClosed, Exception) as e:
-            print(f"⚠️ 연결이 끊겼거나 에러가 발생했습니다: {e}")
-            print("🔄 5초 후 안전하게 재연결을 시도합니다...")
+                        buffer = candle_buffers.setdefault((symbol, tf_key), [])
+                        if buffer and buffer[-1][0] == new_candle[0]:
+                            buffer[-1] = new_candle
+                        else:
+                            buffer.append(new_candle)
+                            if len(buffer) > 500:
+                                buffer.pop(0)
+                        key = make_key(symbol, tf_key, "candles")
+                        atomic_save_json(f"{key}.json", buffer)
+                        hub.update(key, buffer)
+
+        except (websockets.exceptions.ConnectionClosed, OSError, asyncio.TimeoutError) as e:
+            logger.warning(f"웹소켓 연결 문제 - 5초 후 재연결 시도: {type(e).__name__}: {e}")
+            await asyncio.sleep(5)
+        except Exception as e:
+            logger.exception(f"예상치 못한 에러 발생 (연결 문제가 아니라 코드 버그일 수 있음): {e}")
             await asyncio.sleep(5)
 
+
+async def main():
+    await asyncio.gather(
+        watch_live_market(),
+        poll_long_short_ratio(),
+    )
+
+
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     try:
-        asyncio.run(watch_live_market())
+        asyncio.run(main())
     except KeyboardInterrupt:
         print("\n👋 수집기가 사용자에 의해 안전하게 종료되었습니다.")

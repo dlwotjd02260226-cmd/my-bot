@@ -1,89 +1,18 @@
 import pandas as pd
 import numpy as np
-import json
-import os
-import time
+
+from live_data import get_price, get_candles  # 🆕 심볼 인식 가능한 공용 데이터 접근 함수
 
 # =========================================================================
-# v3 추가 보완 (점수 계산 로직은 전혀 건드리지 않고, 파일 입출력 안정성만 보강함)
-#  - 수집기가 파일을 쓰는 도중 읽어서 JSON이 깨지는 경우 대비: 재시도 로직 추가
-#  - live_price.json에 시간 정보가 있으면 너무 오래된(멈춘) 데이터인지 감지하는
-#    선택적 신선도 체크 추가 (시간 필드가 없으면 자동으로 건너뜀 = 기존 동작과 동일)
-#  - 파일 손상/파싱 실패 시 스크립트 전체가 죽지 않고 경고만 띄우고 해당 타임프레임만 건너뜀
+# v4 변경 사항 요약
+#  - load_live_data_and_analyze / analyze_all_timeframes_and_confluence가
+#    "live_price.json", "1h.json"처럼 파일을 직접 읽던 방식 대신, live_data.py의
+#    get_price/get_candles를 쓰도록 변경 (심볼별로 파일명이 달라서 못 찾던 문제 해결).
+#    symbol 파라미터가 추가됨.
+#  - 파일 재시도 읽기·컬럼 수 검증·신선도 체크는 이제 get_price/get_candles 안에
+#    이미 들어있어서, 이 파일에서 중복으로 하던 부분(_load_json_with_retry,
+#    _check_price_staleness)은 제거함.
 # =========================================================================
-
-def _load_json_with_retry(path, retries=3, delay=0.05):
-    """
-    수집기가 파일을 쓰는 도중과 읽는 시점이 겹치면 JSON이 일시적으로 깨져 보일 수 있어서,
-    아주 짧게 텀을 두고 몇 번 재시도한 뒤에도 실패하면 (None, 에러메시지)를 돌려줌.
-    점수 계산 로직과는 무관한 순수 파일 읽기 안정성 보강임.
-    """
-    last_err = None
-    for attempt in range(retries):
-        try:
-            with open(path, "r") as f:
-                return json.load(f), None
-        except (json.JSONDecodeError, OSError) as e:
-            last_err = e
-            if attempt < retries - 1:
-                time.sleep(delay)
-    return None, str(last_err)
-
-
-def _check_price_staleness(price_data, max_staleness_sec, label=""):
-    """
-    live_price.json 안에 timestamp/ts/time/updated_at 중 하나라도 있으면 그 값을 기준으로
-    현재 시각과의 차이를 계산해서 너무 오래된 데이터면 경고만 띄움.
-    해당 필드가 없거나 형식을 알 수 없으면 조용히 건너뜀 (기존 동작과 100% 동일하게 유지).
-    """
-    if max_staleness_sec is None:
-        return
-    ts_val = None
-    for key in ("timestamp", "ts", "time", "updated_at"):
-        if key in price_data:
-            ts_val = price_data[key]
-            break
-    if ts_val is None:
-        return
-    try:
-        ts_num = float(ts_val)
-        ts_sec = ts_num / 1000 if ts_num > 1e12 else ts_num  # 밀리초 단위로 추정되면 보정
-        age = time.time() - ts_sec
-        if age > max_staleness_sec:
-            print(f"⚠️ {label}live_price.json이 {age:.0f}초 전 데이터로 보입니다 "
-                  f"(허용치 {max_staleness_sec}초) — 수집기가 멈췄을 수 있습니다.")
-    except (TypeError, ValueError):
-        pass
-
-
-# =========================================================================
-# v2 변경 사항 요약 (원본 로직/구조는 그대로 유지하고, 아래 항목만 수정·추가했습니다)
-#
-# [버그 수정]
-#  1. 캔들 정렬 순서 미검증 → timestamp로 정렬 + confirm 컬럼으로 미확정봉 제거
-#     (confirm 컬럼이 없으면 원본 방식인 iloc[:-1]로 자동 폴백)
-#  2. 타임프레임 가중치(tf_multiplier)가 레벨별 score엔 안 곱해지고 합산 단계에서만
-#     곱해지던 문제 → 레벨 단위로 반영하고 합산 단계 중복 곱셈 제거
-#  3. 라이브 파이프라인에 custom_tf_weights / longevity_bonus_max / volume_lookback 등이
-#     전달되지 않던 문제 → 전부 전달되도록 연결
-#  4. 병합 시 avg_volume_ratio가 "터치수 가중평균"이라는 주석과 다르게 단순평균이던 문제 → 수정
-#  5. 데이터부족/현재가오류 상황에서 `if res:`가 항상 True로 평가되던 문제 → 명시적 체크로 수정
-#  6. find_confluence_levels의 소수점 자리수가 원본 함수(3단계)와 다른 2단계였던 문제 → 공통 함수로 통일
-#  7. 병합 로직이 "직전 병합 결과"와 비교해 체이닝(연쇄 병합)될 수 있던 문제 → 최초 anchor 가격 기준으로 비교
-#  + live_price.json 비원자적 중복 읽기, ATR NaN 처리, has_volume가 전부 NaN인 경우,
-#    캔들 컬럼 수 미검증 등 보완
-#
-# [신규 추가 — "사람이 직접 보는 것처럼" 판단하기 위한 정성적 보정]
-#  A. 터치 이후 반응(바운스) 강도 — 닿고 나서 실제로 튕겨났는지
-#  B. 거부 캔들 모양(꼬리:몸통 비율) — 핀바형 거부 캔들 가중
-#  C. 라운드 넘버(심리적 가격) 근접 가산점
-#  D. 지지/저항 역할전환(role reversal) 감지
-#  E. 레벨 접근 속도(모멘텀) 진단 (정보성 라벨, 점수엔 미반영)
-#  F. "신선도"(마지막 터치 이후 경과) 진단
-#  → A~D는 하나의 "정성적 보너스"로 묶고 -30%~+80%로 캡을 씌워 점수에 반영 (폭주 방지)
-# =========================================================================
-
-
 def get_price_decimals(price):
     """가격대별 반올림 소수점 자리수 (원본의 3단계 기준을 파일 전체에서 통일해서 사용)"""
     if price >= 1000:
@@ -469,66 +398,38 @@ def calculate_sr_score_by_touch(price, df, tf='1h', custom_tf_weights=None,
 # =========================================================================
 # 실시간 데이터를 긁어와서 위 함수에 대입하는 역할만 하는 함수
 # =========================================================================
-def load_live_data_and_analyze(tf='1h', current_price=None, custom_tf_weights=None,
+def load_live_data_and_analyze(symbol, tf='1h', current_price=None, custom_tf_weights=None,
                                 longevity_bonus_max=0.5, volume_lookback=20,
-                                reaction_lookback=5, data_dir=".", max_price_staleness_sec=None):
+                                reaction_lookback=5, max_price_staleness_sec=None):
     """
-    웹소켓 수집기가 저장해둔 파일(live_price.json, 1h.json 등)에서
-    데이터를 긁어와서 데이터프레임으로 변환 후 분석 함수에 대입합니다.
+    live_data.py의 get_price/get_candles를 통해 데이터를 가져와서 분석 함수에 대입합니다.
 
-    current_price: 이미 다른 곳에서 읽어온 현재가가 있으면 넘겨서 중복 파일 읽기를 피함
-    max_price_staleness_sec: live_price.json 안에 timestamp/ts/time/updated_at 같은
-      시간 필드가 있을 경우, 이 값(초)보다 오래된 데이터면 경고만 띄움 (기본 None=미사용).
-      해당 필드가 아예 없으면 신선도 체크는 조용히 건너뜀 — 기존 동작과 동일하게 유지됨.
+    [🆕 v4 변경] 예전엔 이 파일이 직접 "live_price.json", "1h.json" 같은 이름으로
+    파일을 읽었는데, 실제 수집기(live_data.py)는 "btc-usdt_live_price.json",
+    "btc-usdt_1h_candles.json"처럼 심볼이 들어간 이름으로 저장하기 때문에 못 찾는
+    문제가 있었습니다. live_data.py의 get_price/get_candles를 쓰도록 바꿔서 해결했고,
+    재시도 안전 읽기·컬럼 수 검증도 이제 그쪽에 있으므로 여기서는 중복으로 안 함.
+
+    symbol: 예) "BTC-USDT" — live_data.py의 SYMBOLS 목록에 있어야 함
+    current_price: 이미 다른 곳에서 읽어온 현재가가 있으면 넘겨서 중복 조회를 피함
+    max_price_staleness_sec: get_price에 그대로 전달되는 선택적 신선도 체크 (기본 None=미사용)
     나머지 파라미터는 모두 calculate_sr_score_by_touch로 그대로 전달됨
-      ([🆕 버그 수정 3] 기존엔 이 파라미터들이 라이브 파이프라인까지 안 이어졌음)
     """
-    price_path = os.path.join(data_dir, "live_price.json")
-    candle_path = os.path.join(data_dir, f"{tf.lower()}.json")
-
     if current_price is None:
-        if not os.path.exists(price_path):
-            print(f"⚠️ 실시간 현재가 파일({price_path})을 찾을 수 없습니다.")
+        current_price = get_price(symbol, max_staleness_sec=max_price_staleness_sec)
+        if current_price is None:
+            print(f"⚠️ [{symbol}] 실시간 현재가를 가져올 수 없습니다.")
             return None
-        # 🆕 [안정성 보완] 수집기가 쓰는 도중 읽어 JSON이 깨지는 경우를 대비한 재시도
-        price_data, err = _load_json_with_retry(price_path)
-        if price_data is None:
-            print(f"⚠️ 실시간 현재가 파일({price_path}) 파싱 실패: {err}")
-            return None
-        current_price = float(price_data["price"])
-        _check_price_staleness(price_data, max_price_staleness_sec)  # 🆕 선택적 신선도 체크
 
-    if not os.path.exists(candle_path):
-        print(f"⚠️ 실시간 캔들 파일({candle_path})을 찾을 수 없습니다.")
+    df = get_candles(symbol, tf)
+    if df is None:
+        print(f"⚠️ [{symbol}] {tf} 캔들 데이터를 가져올 수 없습니다.")
         return None
 
-    # 🆕 [안정성 보완] 캔들 파일도 동일하게 재시도 안전 읽기로 변경
-    raw_candles, err = _load_json_with_retry(candle_path)
-    if raw_candles is None:
-        print(f"⚠️ [{tf}] 캔들 파일 파싱 실패: {err}")
-        return None
-
-    cols = ['timestamp', 'open', 'high', 'low', 'close', 'volume', 'volCcy', 'volCcyQuote', 'confirm']
-
-    # 🆕 [거래량 라이브 데이터 점검 1] 캔들 한 줄의 컬럼 수가 예상(9개)과 다르면
-    # 조용히 밀려서 잘못 매핑되지 않도록 여기서 걸러서 알려줌
-    if raw_candles:
-        actual_len = len(raw_candles[0])
-        if actual_len != len(cols):
-            print(f"⚠️ [{tf}] 캔들 데이터 컬럼 수가 예상과 다릅니다 (예상 {len(cols)}개, 실제 {actual_len}개). "
-                  f"수집기 응답 포맷이 바뀌었을 수 있으니 cols 리스트를 확인하세요.")
-            return None
-
-    df = pd.DataFrame(raw_candles, columns=cols)
-
-    for col in ['open', 'high', 'low', 'close', 'volume']:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-
-    # 🆕 [거래량 라이브 데이터 점검 2] volume이 전부 결측/0이면 실제로는 거래량이
+    # 🆕 [거래량 라이브 데이터 점검] volume이 전부 결측/0이면 실제로는 거래량이
     # 안 들어오고 있다는 뜻이므로, 조용히 중립(1.0) 처리되기 전에 눈에 띄게 경고
     if df['volume'].isna().all() or (df['volume'].fillna(0) == 0).all():
-        print(f"⚠️ [{tf}] volume 데이터가 비어있거나 전부 0입니다 — 거래량 가중치가 중립(1.0)으로만 적용됩니다. "
-              f"수집기가 실제로 거래량 필드를 저장하고 있는지 확인하세요.")
+        print(f"⚠️ [{symbol} {tf}] volume 데이터가 비어있거나 전부 0입니다 — 거래량 가중치가 중립(1.0)으로만 적용됩니다.")
 
     return calculate_sr_score_by_touch(
         price=current_price, df=df, tf=tf,
@@ -545,43 +446,34 @@ def load_live_data_and_analyze(tf='1h', current_price=None, custom_tf_weights=No
 ERROR_MESSAGES = {"데이터 부족으로 계산 불가", "현재가 오류"}
 
 
-def analyze_all_timeframes_and_confluence(band_pct=0.005, custom_tf_weights=None,
+def analyze_all_timeframes_and_confluence(symbol, band_pct=0.005, custom_tf_weights=None,
                                            longevity_bonus_max=0.5, volume_lookback=20,
-                                           reaction_lookback=5, data_dir=".",
-                                           max_price_staleness_sec=None):
+                                           reaction_lookback=5, max_price_staleness_sec=None):
     """
     1시간, 4시간, 일봉 데이터를 모두 수집/분석한 뒤,
     서로 다른 타임프레임에서 가격대가 겹치는(Confluence) '초강력 마스터 매물대'를 찾아냅니다.
 
-    max_price_staleness_sec: live_price.json에 시간 필드가 있을 때만 동작하는 선택적
-      신선도 체크. 기본 None=미사용(기존과 동일). 자세한 내용은 load_live_data_and_analyze 참고.
+    symbol: 예) "BTC-USDT"
+    max_price_staleness_sec: 선택적 신선도 체크. 기본 None=미사용.
     """
     tfs = ['1h', '4h', '1d']
     all_results = {}
 
-    price_path = os.path.join(data_dir, "live_price.json")
-    if not os.path.exists(price_path):
-        print(f"❌ 현재가 파일({price_path})을 찾을 수 없어 분석을 시작할 수 없습니다.")
+    current_price = get_price(symbol, max_staleness_sec=max_price_staleness_sec)
+    if current_price is None:
+        print(f"❌ [{symbol}] 현재가를 가져올 수 없어 분석을 시작할 수 없습니다.")
         return
-    # 🆕 [안정성 보완] 재시도 안전 읽기로 교체 (여전히 한 번만 읽어서 아래에 동일하게 전달)
-    price_data, err = _load_json_with_retry(price_path)
-    if price_data is None:
-        print(f"❌ 현재가 파일({price_path}) 파싱 실패: {err}")
-        return
-    current_price = float(price_data["price"])
-    _check_price_staleness(price_data, max_price_staleness_sec)  # 🆕 선택적 신선도 체크
 
-    print("\n🔍 [1H / 4H / 1D 전체 타임프레임 실시간 분석 시작]")
+    print(f"\n🔍 [{symbol} 1H / 4H / 1D 전체 타임프레임 실시간 분석 시작]")
     print("-" * 65)
 
     for tf in tfs:
         res = load_live_data_and_analyze(
-            tf, current_price=current_price,
+            symbol, tf, current_price=current_price,
             custom_tf_weights=custom_tf_weights,
             longevity_bonus_max=longevity_bonus_max,
             volume_lookback=volume_lookback,
             reaction_lookback=reaction_lookback,
-            data_dir=data_dir,
             max_price_staleness_sec=max_price_staleness_sec,
         )
         # [🆕 버그 수정 5] res가 None이 아니어도 에러 메시지 튜플일 수 있으므로 명시적으로 확인
@@ -719,4 +611,5 @@ def analyze_all_timeframes_and_confluence(band_pct=0.005, custom_tf_weights=None
 
 
 if __name__ == "__main__":
-    analyze_all_timeframes_and_confluence(band_pct=0.005)
+    analyze_all_timeframes_and_confluence("BTC-USDT", band_pct=0.005)
+
